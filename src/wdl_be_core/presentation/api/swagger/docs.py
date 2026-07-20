@@ -136,8 +136,8 @@ def setup_docs_routes(app: FastAPI) -> None:
                 "tryItOutEnabled": True,
             },
         )
-        html = bytes(swagger_ui.body).decode("utf-8").replace(
-            "</body>", f"{SWAGGER_UI_THEME}</body>"
+        html = (
+            bytes(swagger_ui.body).decode("utf-8").replace("</body>", f"{SWAGGER_UI_THEME}</body>")
         )
         return HTMLResponse(html)
 
