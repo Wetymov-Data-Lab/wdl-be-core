@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+ESC=$(printf "\033")
+GREEN="${ESC}[32m"
+RED="${ESC}[31m"
+YELLOW="${ESC}[33m"
+CYAN="${ESC}[36m"
+BG_GREEN="${ESC}[42m"
+BG_RED="${ESC}[41m"
+RESET="${ESC}[0m"
+
+FILES_FOR_CHECK=$(git diff --cached --name-only --diff-filter=ACM | grep -E "\.py$" | grep -v "^\.venv")
+
+if [ -n "$FILES_FOR_CHECK" ]; then
+    printf "\n${YELLOW}Files to be linted:${RESET}\n"
+    printf "${CYAN}%s${RESET}\n" "$FILES_FOR_CHECK"
+fi
+
+run_ruff() {
+    local start_time end_time elapsed exit_code output
+
+    start_time=$(date +%s)
+    output=$(uv run ruff check . 2>&1)
+    exit_code=$?
+    end_time=$(date +%s)
+    elapsed=$((end_time - start_time))
+
+    printf "\n${YELLOW}Ruff execution time: ${elapsed} sec${RESET}\n"
+    if [ $exit_code -ne 0 ]; then
+        printf "%s\n" "$output"
+    fi
+    return $exit_code
+}
+
+run_ruff
+if [ $? -ne 0 ]; then
+    printf "\n${BG_RED}COMMIT FAILED:${RESET}${RED} Ruff violations found.${RESET}\n"
+    exit 1
+fi
+
+printf "\n${BG_GREEN}COMMIT SUCCEEDED:${RESET}${GREEN} Ruff checks passed.${RESET}\n"
+exit 0

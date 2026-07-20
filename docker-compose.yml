@@ -1,0 +1,43 @@
+services:
+  api:
+    build:
+      context: .
+      additional_contexts:
+        wdl_shared: ../wdl-shared
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      POSTGRES_SERVER: ${POSTGRES_DOCKER_SERVER:?POSTGRES_DOCKER_SERVER is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_PORT: ${POSTGRES_DOCKER_PORT:?POSTGRES_DOCKER_PORT is required}
+      CORS_DISABLE: ${CORS_DISABLE:?CORS_DISABLE is required}
+    ports:
+      - "${API_EXPOSE_PORT:?API_EXPOSE_PORT is required}:8000"
+    volumes:
+      - ./src:/workspace/wdl-be-core/src
+      - ./migrations:/workspace/wdl-be-core/migrations
+      - ../wdl-shared/src:/workspace/wdl-shared/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "${POSTGRES_EXPOSE_PORT:?POSTGRES_EXPOSE_PORT is required}:5432"
+    volumes:
+      - postgres17_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres17_data:
