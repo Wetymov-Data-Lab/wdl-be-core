@@ -26,6 +26,11 @@ make docker-up
 API в Docker будет доступно по адресу `http://localhost:8001`, документация —
 `http://localhost:8001/docs`. Команда `make dev` запускает API на порту `8000`.
 
+По умолчанию при старте приложения SQLAlchemy создаёт отсутствующие таблицы
+напрямую, без запуска Alembic (`DATABASE_CREATE_TABLES=True`). Этот режим не
+изменяет и не удаляет уже существующие колонки. Когда проект перейдёт на
+миграции, установите `DATABASE_CREATE_TABLES=False` и применяйте `make migrate`.
+
 При локальной установке `uv` подключает `../wdl-shared` в editable-режиме.
 Изменения библиотеки становятся доступны приложению без повторной установки.
 При production-сборке локальный source override отключается, и `wdl-shared`
@@ -57,4 +62,5 @@ API в Docker будет доступно по адресу `http://localhost:80
 
 ---
 
+Описание слоёв и размещения кода находится в [ARCHITECTURE.md](ARCHITECTURE.md).
 Правила разработки и подключение Git hooks описаны в [CONTRIBUTING.md](CONTRIBUTING.md).

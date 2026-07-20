@@ -1,4 +1,4 @@
-.PHONY: env install dev lint format typecheck test check migrate migration docker-up docker-down
+.PHONY: env install dev lint format typecheck test check migrate migration up down stop build logs
 
 env:
 	[ -f .env.example ] && cp -f .env.example .env || echo '.env.example not found'
@@ -29,8 +29,17 @@ migrate:
 migration:
 	uv run alembic revision --autogenerate -m "$(name)"
 
-docker-up:
-	docker compose up --build
+up:
+	docker compose up -d
 
-docker-down:
-	docker compose down
+build:
+	docker compose build
+
+logs:
+	docker compose logs -f
+
+stop:
+	docker compose stop
+
+down:
+	docker compose down -v

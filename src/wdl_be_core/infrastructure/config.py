@@ -9,14 +9,14 @@ class Settings(BaseSettings):
     # App
     # ---------------------------------------------------------------------------
 
-    APP_VERSION:     str = "0.1.0"
-    PROJECT_NAME:    str = "WDL Core API"
-    PROJECT_DESC:    str = "API системы визуализации связей баз данных"
+    APP_VERSION:     str        = "0.1.0"
+    PROJECT_NAME:    str        = "WDL Core API"
+    PROJECT_DESC:    str        = "API системы визуализации связей баз данных"
 
     DEBUG:           str | bool = False
 
     CORS_DISABLE:    str | bool = False
-    CORS_REGEX:      str = r"https://.*\.wdl\.ru"
+    CORS_REGEX:      str        = r"https://.*\.wdl\.ru"
     PROD_SERVER_URL: str | None = None
 
     # ---------------------------------------------------------------------------
@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     POSTGRES_DB:                   str | None = "postgres"
     POSTGRES_PORT:                 str | None = "5432"
     SQLALCHEMY_ASYNC_DATABASE_URI: str | None = None
-    SQLALCHEMY_ECHO:               bool = False
+    SQLALCHEMY_ECHO:               bool       = False
+    DATABASE_CREATE_TABLES:        bool       = True
 
     @model_validator(mode="after")
     def assemble_database_uri(self) -> "Settings":
