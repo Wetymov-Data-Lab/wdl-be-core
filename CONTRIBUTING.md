@@ -29,15 +29,6 @@ git config core.hooksPath .githooks
 chmod +x .githooks/*
 ```
 
-`pre-commit` запускает Ruff. `commit-msg` проверяет Conventional Commits и
-ограничивает заголовок коммита 70 символами.
-
-Допустимые типы коммитов:
-
-```text
-feat, fix, docs, refactor, perf, test, build, ci, chore, revert
-```
-
 Пример:
 
 ```text
