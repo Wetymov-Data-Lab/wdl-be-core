@@ -1,0 +1,83 @@
+Source-Available License v1.0
+
+Copyright (c) 2026 Denis Vasin
+
+TERMS AND CONDITIONS
+
+1. DEFINITIONS
+
+   "Software" — the source code, documentation, and any associated files
+   in this repository.
+
+   "Author" — the original copyright holder listed above.
+
+   "You" — any individual or legal entity accessing or using the Software.
+
+   "Derivative Work" — any work based on or incorporating substantial
+   portions of the Software's code, structure, or logic.
+
+2. PERMISSIONS
+
+   Subject to the conditions below, the Author grants You a limited,
+   non-exclusive, non-transferable, revocable right to:
+
+   a) View and study the Software for personal educational purposes.
+
+   b) Use the ideas, concepts, algorithms, and techniques found in the
+   Software as inspiration for Your own original work, provided that
+   Your work is independently written and does not constitute a copy
+   or Derivative Work of the Software.
+
+   c) Reference or cite the Software in academic or educational contexts.
+
+3. RESTRICTIONS
+
+   You may NOT, without prior written permission from the Author:
+
+   a) Copy, reproduce, or duplicate the Software, in whole or in
+   substantial part.
+
+   b) Create Derivative Works based on the Software's code.
+
+   c) Distribute, publish, sublicense, sell, or otherwise make available
+   the Software or any portion thereof to third parties.
+
+   d) Use the Software, in whole or in substantial part, in any
+   commercial or non-commercial project, product, or service.
+
+   e) Fork, clone, or mirror this repository for any purpose other
+   than private, local viewing.
+
+4. WHAT IS ALLOWED (CLARIFICATION)
+
+   — Reading the code to understand how something works: OK.
+   — Writing your own implementation from scratch after studying the
+   approach: OK, as long as it is original code.
+   — Copying files, functions, classes, or significant code blocks
+   into your project: NOT OK.
+   — Forking the repo and publishing it (even with modifications):
+   NOT OK.
+
+5. REQUESTING PERMISSION
+
+   If You wish to use the Software beyond what is permitted here,
+   contact the Author at wetymov.dev@gmail.com to discuss licensing
+   terms.
+
+6. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED. THE AUTHOR SHALL NOT BE LIABLE FOR ANY CLAIM,
+   DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OR INABILITY TO
+   USE THE SOFTWARE.
+
+7. TERMINATION
+
+   This license is automatically terminated if You violate any of the
+   above terms. Upon termination, You must destroy all copies of the
+   Software in Your possession.
+
+8. GOVERNING LAW
+
+   This license shall be governed by and construed in accordance with
+   the laws of the Russian Federation.
