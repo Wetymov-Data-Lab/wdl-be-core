@@ -27,6 +27,48 @@ SWAGGER_UI_THEME = """
     color: var(--text);
     border-color: #64748b;
   }
+  html[data-swagger-theme="dark"] .swagger-ui textarea,
+  html[data-swagger-theme="dark"] .swagger-ui input[type="text"],
+  html[data-swagger-theme="dark"] .swagger-ui input[type="email"],
+  html[data-swagger-theme="dark"] .swagger-ui input[type="password"],
+  html[data-swagger-theme="dark"] .swagger-ui input[type="search"],
+  html[data-swagger-theme="dark"] .swagger-ui input[type="number"],
+  html[data-swagger-theme="dark"] .swagger-ui select {
+    background: #111827;
+    color: var(--text);
+    border-color: #64748b;
+  }
+  html[data-swagger-theme="dark"] .swagger-ui textarea:focus,
+  html[data-swagger-theme="dark"] .swagger-ui input:focus,
+  html[data-swagger-theme="dark"] .swagger-ui select:focus {
+    border-color: #60a5fa;
+    outline: 1px solid #60a5fa;
+  }
+  html[data-swagger-theme="dark"] .swagger-ui textarea::placeholder,
+  html[data-swagger-theme="dark"] .swagger-ui input::placeholder {
+    color: #94a3b8;
+    opacity: 1;
+  }
+  html[data-swagger-theme="dark"] .swagger-ui .opblock-body,
+  html[data-swagger-theme="dark"] .swagger-ui .opblock-body h4,
+  html[data-swagger-theme="dark"] .swagger-ui .opblock-body h5,
+  html[data-swagger-theme="dark"] .swagger-ui .opblock-body p,
+  html[data-swagger-theme="dark"] .swagger-ui .opblock-body label,
+  html[data-swagger-theme="dark"] .swagger-ui .tab li button.tablinks,
+  html[data-swagger-theme="dark"] .swagger-ui table thead tr td,
+  html[data-swagger-theme="dark"] .swagger-ui table thead tr th,
+  html[data-swagger-theme="dark"] .swagger-ui table tbody tr td,
+  html[data-swagger-theme="dark"] .swagger-ui .parameter__name,
+  html[data-swagger-theme="dark"] .swagger-ui .parameter__type,
+  html[data-swagger-theme="dark"] .swagger-ui .parameter__in,
+  html[data-swagger-theme="dark"] .swagger-ui .response-control-media-type__title,
+  html[data-swagger-theme="dark"] .swagger-ui .response-col_links,
+  html[data-swagger-theme="dark"] .swagger-ui .responses-inner h4,
+  html[data-swagger-theme="dark"] .swagger-ui .responses-inner h5,
+  html[data-swagger-theme="dark"] .swagger-ui .renderedMarkdown,
+  html[data-swagger-theme="dark"] .swagger-ui .renderedMarkdown p {
+    color: var(--text) !important;
+  }
   html[data-swagger-theme="dark"]
     .swagger-ui .filter-container input[type="text"]::placeholder,
   html[data-swagger-theme="dark"] .swagger-ui .opblock-tag small {
