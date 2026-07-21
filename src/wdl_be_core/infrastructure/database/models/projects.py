@@ -12,9 +12,10 @@ class Projects(Base):
 
     __tablename__ = "projects"
 
+    # Permissions
     __model_permissions__ = [
         ("create", "Разрешает создание объекта Project"),
-        ("view", "Разрешает просмотр объекта Project"),
+        ("read", "Разрешает просмотр объекта Project"),
         ("update", "Разрешает редактирование объекта Project"),
         ("delete", "Разрешает удаление объекта Project"),
     ]

@@ -1,9 +1,9 @@
 from .database import Columns, Databases, Tables
 from .projects import Projects
-from .realms import Realms
+from .realms import RealmSchema
 
 __all__ = [
-    "Realms",
+    "RealmSchema",
     "Databases",
     "Tables",
     "Columns",

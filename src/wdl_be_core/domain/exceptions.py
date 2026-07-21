@@ -4,3 +4,11 @@ class DomainError(Exception):
 
 class EntityNotFoundError(DomainError):
     """Requested domain entity does not exist."""
+
+
+class InvalidRealmNameError(DomainError):
+    """Realm name is empty after normalization."""
+
+
+class RealmAlreadyExistsError(DomainError):
+    """A realm with the same name already exists."""

@@ -3,7 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
-from wdl_shared.schemas.engine.enums import ColumnType, DataBaseName
+from wdl_shared.schemas.engine.enums.database import ColumnType, DataBaseName
 
 from wdl_be_core.infrastructure.database.base import Base
 
@@ -13,6 +13,7 @@ class Databases(Base):
 
     __tablename__ = "databases"
 
+    # Permissions
     __model_permissions__ = [
         ("create", "Разрешает создание объекта Database"),
         ("read", "Разрешает просмотр объекта Database"),
@@ -38,6 +39,7 @@ class Tables(Base):
 
     __tablename__ = "tables"
 
+    # Permissions
     __model_permissions__ = [
         ("create", "Разрешает создание объекта Table"),
         ("read", "Разрешает просмотр объекта Table"),
@@ -64,6 +66,7 @@ class Columns(Base):
 
     __tablename__ = "columns"
 
+    # Permissions
     __model_permissions__ = [
         ("create", "Разрешает создание объекта Column"),
         ("read", "Разрешает просмотр объекта Column"),

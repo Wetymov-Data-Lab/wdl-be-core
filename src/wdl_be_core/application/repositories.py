@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
-from wdl_be_core.domain.entities import Entity
+from wdl_be_core.domain.entities.base import Entity
 
 
-class Repository[EntityT: Entity[object], EntityId](ABC):
+class Repository[EntityT: Entity[Any], EntityId](ABC):
     """Persistence contract used by application use cases."""
 
     @abstractmethod

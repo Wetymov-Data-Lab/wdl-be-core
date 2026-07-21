@@ -36,6 +36,16 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/wdl_be_core/infrastructure/database/models/*.py" = ["E221", "E241"]
+"src/wdl_be_core/infrastructure/config.py" = ["E221", "E241"]
+
+[tool.ruff.format]
+exclude = [
+    "src/wdl_be_core/infrastructure/config.py",
+    "src/wdl_be_core/infrastructure/database/models/*.py",
+]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

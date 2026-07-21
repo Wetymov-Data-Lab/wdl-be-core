@@ -1,11 +1,11 @@
 from fastapi import APIRouter
-from wdl_shared.schemas.engine.common import HealthResponse
+from wdl_shared.schemas.engine.common.health import HealthResponse
 
-from .routers import realm
+from wdl_be_core.presentation.api.routers.realm import router as realm_router
 
 api_router = APIRouter()
 
-api_router.include_router(realm.router)
+api_router.include_router(realm_router)
 
 
 @api_router.get("/health", tags=["system"], response_model=HealthResponse)

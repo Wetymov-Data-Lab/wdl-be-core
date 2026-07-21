@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from wdl_be_core.infrastructure.config import settings
 from wdl_be_core.infrastructure.cors import disable_cors_debug, production_cors
 from wdl_be_core.infrastructure.database.session import create_tables, engine
+from wdl_be_core.presentation.api.errors import setup_exception_handlers
 from wdl_be_core.presentation.api.router import api_router
 from wdl_be_core.presentation.api.swagger.docs import setup_docs_routes
 from wdl_be_core.presentation.api.swagger.openapi import custom_openapi
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     current_app.include_router(api_router)
+    setup_exception_handlers(current_app)
     current_app.openapi = custom_openapi(current_app)  # type: ignore[method-assign]
     setup_docs_routes(current_app)
     if settings.CORS_DISABLE:
