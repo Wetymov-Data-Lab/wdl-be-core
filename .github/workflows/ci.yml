@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build production image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out wdl-be-core
+        uses: actions/checkout@v7
+        with:
+          path: wdl-be-core
+
+      - name: Check out wdl-shared
+        uses: actions/checkout@v7
+        with:
+          repository: Wetymov-Data-Lab/wdl-shared
+          path: wdl-shared
+
+      - name: Build production Docker image
+        run: >-
+          docker build
+          --build-context wdl_shared=wdl-shared
+          --file wdl-be-core/Dockerfile
+          --target production
+          --tag wdl-be-core:${{ github.sha }}
+          wdl-be-core
+
+  gitleaks:
+    name: Scan for secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        run: >-
+          docker run --rm
+          --volume "${{ github.workspace }}:/repo"
+          ghcr.io/gitleaks/gitleaks:v8.30.1
+          detect
+          --source=/repo
+          --redact
+          --verbose
+
+  tests:
+    name: Run tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out wdl-be-core
+        uses: actions/checkout@v7
+        with:
+          path: wdl-be-core
+
+      - name: Check out wdl-shared
+        uses: actions/checkout@v7
+        with:
+          repository: Wetymov-Data-Lab/wdl-shared
+          path: wdl-shared
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.12"
+          working-directory: wdl-be-core
+          enable-cache: true
+          cache-dependency-glob: wdl-be-core/uv.lock
+
+      - name: Install dependencies
+        working-directory: wdl-be-core
+        run: uv sync --frozen --all-groups
+
+      - name: Run pytest
+        working-directory: wdl-be-core
+        run: uv run --frozen pytest
