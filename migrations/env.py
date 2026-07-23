@@ -5,6 +5,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+import wdl_be_core.infrastructure.database.models  # noqa: F401
 from wdl_be_core.infrastructure.config import get_settings
 from wdl_be_core.infrastructure.database.base import Base
 

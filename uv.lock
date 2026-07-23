@@ -1200,7 +1200,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "ruff", specifier = ">=0.15.22" }]
+dev = [
+    { name = "pytest", specifier = ">=8.3,<9" },
+    { name = "ruff", specifier = ">=0.15.22" },
+]
 
 [[package]]
 name = "websockets"
