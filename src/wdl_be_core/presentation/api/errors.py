@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from wdl_be_core.domain.exceptions import (
     DomainError,
+    EntityAlreadyExistsError,
     EntityNotFoundError,
     InvalidRealmNameError,
     RealmAlreadyExistsError,
@@ -15,6 +16,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": str(error)})
 
     @app.exception_handler(RealmAlreadyExistsError)
+    @app.exception_handler(EntityAlreadyExistsError)
     async def conflict(_: Request, error: RealmAlreadyExistsError) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(error)})
 

@@ -6,6 +6,10 @@ class EntityNotFoundError(DomainError):
     """Requested domain entity does not exist."""
 
 
+class EntityAlreadyExistsError(DomainError):
+    """An entity violates a uniqueness constraint."""
+
+
 class InvalidRealmNameError(DomainError):
     """Realm name is empty after normalization."""
 
