@@ -20,25 +20,10 @@ services:
       - ./src:/workspace/wdl-be-core/src
       - ./migrations:/workspace/wdl-be-core/migrations
       - ../wdl-shared/src:/workspace/wdl-shared/src
-    depends_on:
-      postgres:
-        condition: service_healthy
+    networks:
+      - vendor-network
 
-  postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
-      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-    ports:
-      - "${POSTGRES_EXPOSE_PORT:?POSTGRES_EXPOSE_PORT is required}:5432"
-    volumes:
-      - postgres17_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  postgres17_data:
+networks:
+  vendor-network:
+    external: true
+    name: vendor-network
