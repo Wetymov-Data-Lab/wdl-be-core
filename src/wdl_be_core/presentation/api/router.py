@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from wdl_shared.schemas.engine.common.health import HealthResponse
+from wdl_shared.schemas.common import HealthResponse
 
 from wdl_be_core.presentation.api.routers.canvas import router as canvas_router
 from wdl_be_core.presentation.api.routers.database import router as database_router
