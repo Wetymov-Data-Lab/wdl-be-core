@@ -37,7 +37,7 @@ class RealmSchema(Base):
     slug:       Mapped[str]             = mapped_column(String(255), unique=True)
     status:     Mapped[str]             = mapped_column(String(32), default="active")
     visibility: Mapped[str]             = mapped_column(String(32), default="private")
-    settings:    Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    settings:   Mapped[dict[str, Any]]  = mapped_column(JSON, default=dict)
     notice:     Mapped[str | None]      = mapped_column(String(255), nullable=True)
 
     # Additional attributes

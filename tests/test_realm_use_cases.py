@@ -9,10 +9,18 @@ from wdl_be_core.application.services.realm import (
     DeleteRealm,
     DeleteRealmRequest,
     GetRealm,
+    GetRealmRequest,
+    ListRealms,
     UpdateRealm,
     UpdateRealmRequest,
 )
-from wdl_be_core.domain.entities.realm import Realm, RealmName, RealmStatus, RealmVisibility
+from wdl_be_core.domain.entities.realm import (
+    Realm,
+    RealmName,
+    RealmSlug,
+    RealmStatus,
+    RealmVisibility,
+)
 from wdl_be_core.domain.exceptions import EntityNotFoundError, RealmAlreadyExistsError
 from wdl_be_core.domain.repositories.realm import RealmRepository, RealmUnitOfWork
 
@@ -31,7 +39,7 @@ class FakeRealmRepository(RealmRepository):
     async def exists_by_name(self, name: RealmName, *, exclude_id: UUID | None = None) -> bool:
         return any(realm.name == name and realm.id != exclude_id for realm in self.items.values())
 
-    async def exists_by_slug(self, slug: str, *, exclude_id: UUID | None = None) -> bool:
+    async def exists_by_slug(self, slug: RealmSlug, *, exclude_id: UUID | None = None) -> bool:
         return any(realm.slug == slug and realm.id != exclude_id for realm in self.items.values())
 
     async def add(self, entity: Realm) -> None:
@@ -83,7 +91,10 @@ async def test_create_get_update_delete_realm() -> None:
     )
     assert created.name.value == "Main realm"
     assert created.author_id == author_id
-    assert await GetRealm(uow).execute(created.id) == created
+    assert (
+        await GetRealm(uow).execute(GetRealmRequest(realm_id=created.id, user_id=author_id))
+        == created
+    )
 
     updated = await UpdateRealm(uow).execute(
         UpdateRealmRequest(
@@ -125,4 +136,39 @@ async def test_duplicate_realm_name_is_rejected() -> None:
 
 async def test_missing_realm_is_rejected() -> None:
     with pytest.raises(EntityNotFoundError):
-        await GetRealm(FakeRealmUnitOfWork()).execute(uuid4())
+        await GetRealm(FakeRealmUnitOfWork()).execute(
+            GetRealmRequest(realm_id=uuid4(), user_id=uuid4())
+        )
+
+
+async def test_realm_visibility_is_limited_to_owner_unless_public() -> None:
+    uow = FakeRealmUnitOfWork()
+    owner_id = uuid4()
+    viewer_id = uuid4()
+    private_realm = await CreateRealm(uow).execute(
+        CreateRealmRequest(
+            name="Private",
+            slug="private",
+            status=RealmStatus.ACTIVE,
+            visibility=RealmVisibility.PRIVATE,
+            settings={},
+            notice=None,
+            author_id=owner_id,
+        )
+    )
+    public_realm = await CreateRealm(uow).execute(
+        CreateRealmRequest(
+            name="Public",
+            slug="public",
+            status=RealmStatus.ACTIVE,
+            visibility=RealmVisibility.PUBLIC,
+            settings={},
+            notice=None,
+            author_id=owner_id,
+        )
+    )
+
+    visible = await ListRealms(uow).execute(viewer_id)
+
+    assert visible == [public_realm]
+    assert private_realm not in visible

@@ -2,35 +2,39 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response, status
-from wdl_shared.schemas.engine.models.realms import (
-    RealmCreateModel,
-    RealmResponseModel,
-    RealmUpdateModel,
-)
+from wdl_shared.schemas.engine.models.realms import RealmResponseModel
 
+from wdl_be_core.application.identity import CurrentUser
 from wdl_be_core.application.services.realm import (
     CreateRealm,
     CreateRealmRequest,
     DeleteRealm,
     DeleteRealmRequest,
     GetRealm,
+    GetRealmRequest,
     ListRealms,
     UpdateRealm,
     UpdateRealmRequest,
 )
 from wdl_be_core.domain.entities.realm import Realm, RealmStatus, RealmVisibility
 from wdl_be_core.infrastructure.database.unit_of_work import SQLAlchemyUnitOfWork
+from wdl_be_core.presentation.api.dependencies.authentication import get_current_user
 from wdl_be_core.presentation.api.dependencies.realm import get_realm_uow
+from wdl_be_core.presentation.api.schemas.realm import (
+    RealmCreateRequestModel,
+    RealmUpdateRequestModel,
+)
 
 router = APIRouter(prefix="/realms", tags=["realms"])
 RealmUow = Annotated[SQLAlchemyUnitOfWork, Depends(get_realm_uow)]
+AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 
 
 def to_response(realm: Realm) -> RealmResponseModel:
     return RealmResponseModel(
         id=realm.id,
         name=realm.name.value,
-        slug=realm.slug,
+        slug=realm.slug.value,
         status=realm.status.value,
         visibility=realm.visibility.value,
         settings=realm.settings,
@@ -44,18 +48,21 @@ def to_response(realm: Realm) -> RealmResponseModel:
 
 
 @router.get("/", response_model=list[RealmResponseModel])
-async def get_realms(uow: RealmUow) -> list[RealmResponseModel]:
-    realms = await ListRealms(uow).execute()
+async def get_realms(uow: RealmUow, user: AuthenticatedUser) -> list[RealmResponseModel]:
+    realms = await ListRealms(uow).execute(user.account_id)
     return [to_response(realm) for realm in realms]
 
 
 @router.get("/{realm_id}", response_model=RealmResponseModel)
-async def get_realm(realm_id: UUID, uow: RealmUow) -> RealmResponseModel:
-    return to_response(await GetRealm(uow).execute(realm_id))
+async def get_realm(realm_id: UUID, uow: RealmUow, user: AuthenticatedUser) -> RealmResponseModel:
+    request = GetRealmRequest(realm_id=realm_id, user_id=user.account_id)
+    return to_response(await GetRealm(uow).execute(request))
 
 
 @router.post("/", response_model=RealmResponseModel, status_code=status.HTTP_201_CREATED)
-async def create_realm(body: RealmCreateModel, uow: RealmUow) -> RealmResponseModel:
+async def create_realm(
+    body: RealmCreateRequestModel, uow: RealmUow, user: AuthenticatedUser
+) -> RealmResponseModel:
     realm = await CreateRealm(uow).execute(
         CreateRealmRequest(
             name=body.name,
@@ -64,14 +71,16 @@ async def create_realm(body: RealmCreateModel, uow: RealmUow) -> RealmResponseMo
             visibility=RealmVisibility(body.visibility),
             settings=body.settings,
             notice=body.notice,
-            author_id=body.author_id,
+            author_id=user.account_id,
         )
     )
     return to_response(realm)
 
 
 @router.put("/{realm_id}", response_model=RealmResponseModel)
-async def update_realm(realm_id: UUID, body: RealmUpdateModel, uow: RealmUow) -> RealmResponseModel:
+async def update_realm(
+    realm_id: UUID, body: RealmUpdateRequestModel, uow: RealmUow, user: AuthenticatedUser
+) -> RealmResponseModel:
     realm = await UpdateRealm(uow).execute(
         UpdateRealmRequest(
             realm_id=realm_id,
@@ -81,13 +90,15 @@ async def update_realm(realm_id: UUID, body: RealmUpdateModel, uow: RealmUow) ->
             visibility=RealmVisibility(body.visibility),
             settings=body.settings,
             notice=body.notice,
-            updated_by=body.updated_by,
+            updated_by=user.account_id,
         )
     )
     return to_response(realm)
 
 
 @router.delete("/{realm_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_realm(realm_id: UUID, updated_by: UUID, uow: RealmUow) -> Response:
-    await DeleteRealm(uow).execute(DeleteRealmRequest(realm_id=realm_id, updated_by=updated_by))
+async def delete_realm(realm_id: UUID, uow: RealmUow, user: AuthenticatedUser) -> Response:
+    await DeleteRealm(uow).execute(
+        DeleteRealmRequest(realm_id=realm_id, updated_by=user.account_id)
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

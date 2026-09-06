@@ -1,9 +1,16 @@
+import builtins
 from uuid import UUID
 
-from sqlalchemy import delete, exists, select, update
+from sqlalchemy import delete, exists, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from wdl_be_core.domain.entities.realm import Realm, RealmName, RealmStatus, RealmVisibility
+from wdl_be_core.domain.entities.realm import (
+    Realm,
+    RealmName,
+    RealmSlug,
+    RealmStatus,
+    RealmVisibility,
+)
 from wdl_be_core.domain.repositories.realm import RealmRepository as AbstractRealmRepository
 from wdl_be_core.infrastructure.database.models.realms import RealmSchema
 
@@ -21,11 +28,27 @@ class RealmRepository(AbstractRealmRepository):
         )
         return None if model is None else self._to_domain(model)
 
-    async def list(self) -> list[Realm]:
+    async def list(self) -> builtins.list[Realm]:
         models = (
             await self._session.scalars(
                 select(RealmSchema)
                 .where(RealmSchema.deleted_at.is_(None))
+                .order_by(RealmSchema.created_at)
+            )
+        ).all()
+        return [self._to_domain(model) for model in models]
+
+    async def list_visible_to(self, user_id: UUID) -> builtins.list[Realm]:
+        models = (
+            await self._session.scalars(
+                select(RealmSchema)
+                .where(
+                    RealmSchema.deleted_at.is_(None),
+                    or_(
+                        RealmSchema.author_id == user_id,
+                        RealmSchema.visibility == RealmVisibility.PUBLIC.value,
+                    ),
+                )
                 .order_by(RealmSchema.created_at)
             )
         ).all()
@@ -39,10 +62,12 @@ class RealmRepository(AbstractRealmRepository):
             )
         return bool(await self._session.scalar(query))
 
-    async def exists_by_slug(self, slug: str, *, exclude_id: UUID | None = None) -> bool:
-        query = select(exists().where(RealmSchema.slug == slug))
+    async def exists_by_slug(self, slug: RealmSlug, *, exclude_id: UUID | None = None) -> bool:
+        query = select(exists().where(RealmSchema.slug == slug.value))
         if exclude_id is not None:
-            query = select(exists().where(RealmSchema.slug == slug, RealmSchema.id != exclude_id))
+            query = select(
+                exists().where(RealmSchema.slug == slug.value, RealmSchema.id != exclude_id)
+            )
         return bool(await self._session.scalar(query))
 
     async def add(self, entity: Realm) -> None:
@@ -50,7 +75,7 @@ class RealmRepository(AbstractRealmRepository):
             RealmSchema(
                 id=entity.id,
                 name=entity.name.value,
-                slug=entity.slug,
+                slug=entity.slug.value,
                 status=entity.status.value,
                 visibility=entity.visibility.value,
                 settings=entity.settings,
@@ -69,7 +94,7 @@ class RealmRepository(AbstractRealmRepository):
             .where(RealmSchema.id == realm.id)
             .values(
                 name=realm.name.value,
-                slug=realm.slug,
+                slug=realm.slug.value,
                 status=realm.status.value,
                 visibility=realm.visibility.value,
                 settings=realm.settings,
@@ -88,7 +113,7 @@ class RealmRepository(AbstractRealmRepository):
         return Realm(
             id=model.id,
             name=RealmName(value=model.name),
-            slug=model.slug,
+            slug=RealmSlug(value=model.slug),
             status=RealmStatus(model.status),
             visibility=RealmVisibility(model.visibility),
             settings=model.settings,
