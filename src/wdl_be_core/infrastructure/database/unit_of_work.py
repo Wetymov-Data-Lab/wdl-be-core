@@ -2,11 +2,13 @@ from types import TracebackType
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from wdl_be_core.domain.repositories.group import GroupUnitOfWork
 from wdl_be_core.domain.repositories.realm import RealmUnitOfWork
+from wdl_be_core.infrastructure.database.repositories.groups import GroupRepository
 from wdl_be_core.infrastructure.database.repositories.realms import RealmRepository
 
 
-class SQLAlchemyUnitOfWork(RealmUnitOfWork):
+class SQLAlchemyUnitOfWork(RealmUnitOfWork, GroupUnitOfWork):
     """Base SQLAlchemy transaction; domain repositories are added by subclasses."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -16,6 +18,7 @@ class SQLAlchemyUnitOfWork(RealmUnitOfWork):
     async def __aenter__(self) -> "SQLAlchemyUnitOfWork":
         self.session = self._session_factory()
         self.realms = RealmRepository(self.session)
+        self.groups = GroupRepository(self.session)
         return self
 
     async def __aexit__(
