@@ -10,8 +10,10 @@ from wdl_shared.schemas.engine.models.projects import (
     ProjectUpdateModel,
 )
 
+from wdl_be_core.application.identity import CurrentUser
 from wdl_be_core.infrastructure.database.models.projects import Projects
 from wdl_be_core.infrastructure.database.models.realms import RealmSchema
+from wdl_be_core.presentation.api.dependencies.authentication import get_current_user
 from wdl_be_core.presentation.api.dependencies.database import get_database_session
 from wdl_be_core.presentation.api.routers.crud import (
     apply_values,
@@ -19,8 +21,9 @@ from wdl_be_core.presentation.api.routers.crud import (
     get_or_404,
 )
 
-router = APIRouter(prefix="/projects", tags=["projects"])
+router = APIRouter(prefix="/projects", tags=["projects"], dependencies=[Depends(get_current_user)])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
+AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 
 
 @router.get("/", response_model=list[ProjectResponseModel])
@@ -49,9 +52,14 @@ async def get_project(project_id: UUID, session: DatabaseSession) -> ProjectResp
 async def create_project(
     body: ProjectCreateModel,
     session: DatabaseSession,
+    user: AuthenticatedUser,
 ) -> ProjectResponseModel:
     await get_or_404(session, RealmSchema, body.realm_id)
-    project = Projects(id=uuid4(), **body.model_dump())
+    project = Projects(
+        id=uuid4(),
+        author_id=user.account_id,
+        **body.model_dump(exclude={"author_id"}),
+    )
     session.add(project)
     await commit_or_conflict(session, f"Project '{body.name}' already exists in this realm")
     await session.refresh(project)

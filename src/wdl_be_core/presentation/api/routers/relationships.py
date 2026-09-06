@@ -15,6 +15,7 @@ from wdl_shared.schemas.engine.models.database import (
     RelationshipUpdateModel,
 )
 
+from wdl_be_core.application.identity import CurrentUser
 from wdl_be_core.domain.exceptions import EntityNotFoundError
 from wdl_be_core.infrastructure.database.models.database import (
     Columns,
@@ -25,6 +26,7 @@ from wdl_be_core.infrastructure.database.models.database import (
     Relationships,
     Tables,
 )
+from wdl_be_core.presentation.api.dependencies.authentication import get_current_user
 from wdl_be_core.presentation.api.dependencies.database import get_database_session
 from wdl_be_core.presentation.api.routers.crud import (
     apply_values,
@@ -33,8 +35,9 @@ from wdl_be_core.presentation.api.routers.crud import (
     get_or_404,
 )
 
-router = APIRouter(tags=["database relationships"])
+router = APIRouter(tags=["database relationships"], dependencies=[Depends(get_current_user)])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
+AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 
 
 async def index_response(session: AsyncSession, index: DiagramIndexes) -> IndexResponseModel:
@@ -120,7 +123,9 @@ async def get_index(index_id: UUID, session: DatabaseSession) -> IndexResponseMo
 
 
 @router.post("/indexes/", response_model=IndexResponseModel, status_code=status.HTTP_201_CREATED)
-async def create_index(body: IndexCreateModel, session: DatabaseSession) -> IndexResponseModel:
+async def create_index(
+    body: IndexCreateModel, session: DatabaseSession, user: AuthenticatedUser
+) -> IndexResponseModel:
     await get_or_404(session, Tables, body.table_id)
     for column_item in body.columns:
         column = await get_or_404(session, Columns, column_item.column_id)
@@ -130,7 +135,8 @@ async def create_index(body: IndexCreateModel, session: DatabaseSession) -> Inde
             )
     index = DiagramIndexes(
         id=uuid4(),
-        **body.model_dump(exclude={"columns"}),
+        author_id=user.account_id,
+        **body.model_dump(exclude={"columns", "author_id"}),
     )
     session.add(index)
     await flush_or_conflict(session, f"Index '{body.name}' already exists")
@@ -198,9 +204,7 @@ async def list_relationships(
             .order_by(Relationships.created_at)
         )
     ).all()
-    return [
-        await relationship_response(session, relationship) for relationship in relationships
-    ]
+    return [await relationship_response(session, relationship) for relationship in relationships]
 
 
 @router.get("/relationships/{relationship_id}", response_model=RelationshipResponseModel)
@@ -220,6 +224,7 @@ async def get_relationship(
 async def create_relationship(
     body: RelationshipCreateModel,
     session: DatabaseSession,
+    user: AuthenticatedUser,
 ) -> RelationshipResponseModel:
     await get_or_404(session, Databases, body.database_id)
     source_table = await get_or_404(session, Tables, body.source_table_id)
@@ -236,7 +241,8 @@ async def create_relationship(
             raise EntityNotFoundError("Relationship columns must belong to their endpoint tables")
     relationship = Relationships(
         id=uuid4(),
-        **body.model_dump(exclude={"columns"}),
+        author_id=user.account_id,
+        **body.model_dump(exclude={"columns", "author_id"}),
     )
     session.add(relationship)
     await flush_or_conflict(session, f"Relationship '{body.name}' already exists")
@@ -273,9 +279,7 @@ async def update_relationship(
             raise EntityNotFoundError("Relationship columns must belong to their endpoint tables")
     apply_values(relationship, body.model_dump(exclude={"columns"}))
     await session.execute(
-        delete(RelationshipColumns).where(
-            RelationshipColumns.relationship_id == relationship.id
-        )
+        delete(RelationshipColumns).where(RelationshipColumns.relationship_id == relationship.id)
     )
     await session.flush()
     session.add_all(

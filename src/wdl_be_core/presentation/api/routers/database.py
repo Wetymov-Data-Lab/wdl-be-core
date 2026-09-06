@@ -16,8 +16,10 @@ from wdl_shared.schemas.engine.models.database import (
     TableUpdateModel,
 )
 
+from wdl_be_core.application.identity import CurrentUser
 from wdl_be_core.infrastructure.database.models.database import Columns, Databases, Tables
 from wdl_be_core.infrastructure.database.models.projects import Projects
+from wdl_be_core.presentation.api.dependencies.authentication import get_current_user
 from wdl_be_core.presentation.api.dependencies.database import get_database_session
 from wdl_be_core.presentation.api.routers.crud import (
     apply_values,
@@ -25,8 +27,9 @@ from wdl_be_core.presentation.api.routers.crud import (
     get_or_404,
 )
 
-router = APIRouter(tags=["database schema"])
+router = APIRouter(tags=["database schema"], dependencies=[Depends(get_current_user)])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
+AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 
 
 @router.get("/databases/", response_model=list[DatabaseResponseModel])
@@ -55,9 +58,14 @@ async def get_database(database_id: UUID, session: DatabaseSession) -> DatabaseR
 async def create_database(
     body: DatabaseCreateModel,
     session: DatabaseSession,
+    user: AuthenticatedUser,
 ) -> DatabaseResponseModel:
     await get_or_404(session, Projects, body.project_id)
-    database = Databases(id=uuid4(), **body.model_dump())
+    database = Databases(
+        id=uuid4(),
+        author_id=user.account_id,
+        **body.model_dump(exclude={"author_id"}),
+    )
     session.add(database)
     await commit_or_conflict(session, f"Database '{body.name}' already exists in this project")
     await session.refresh(database)
@@ -107,10 +115,12 @@ async def get_table(table_id: UUID, session: DatabaseSession) -> TableResponseMo
 
 
 @router.post("/tables/", response_model=TableResponseModel, status_code=status.HTTP_201_CREATED)
-async def create_table(body: TableCreateModel, session: DatabaseSession) -> TableResponseModel:
+async def create_table(
+    body: TableCreateModel, session: DatabaseSession, user: AuthenticatedUser
+) -> TableResponseModel:
     await get_or_404(session, Databases, body.database_id)
-    values = body.model_dump(exclude={"position"})
-    table  = Tables(id=uuid4(), **values)
+    values = body.model_dump(exclude={"position", "author_id"})
+    table = Tables(id=uuid4(), author_id=user.account_id, **values)
     table.position = body.position
     session.add(table)
     await commit_or_conflict(session, f"Table '{body.name}' already exists in this database")
@@ -166,9 +176,14 @@ async def get_column(column_id: UUID, session: DatabaseSession) -> ColumnRespons
 async def create_column(
     body: ColumnCreateModel,
     session: DatabaseSession,
+    user: AuthenticatedUser,
 ) -> ColumnResponseModel:
     await get_or_404(session, Tables, body.table_id)
-    column = Columns(id=uuid4(), **body.model_dump())
+    column = Columns(
+        id=uuid4(),
+        author_id=user.account_id,
+        **body.model_dump(exclude={"author_id"}),
+    )
     session.add(column)
     await commit_or_conflict(session, f"Column '{body.name}' already exists in this table")
     await session.refresh(column)

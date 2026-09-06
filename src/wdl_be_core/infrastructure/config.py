@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +31,18 @@ class Settings(BaseSettings):
     SQLALCHEMY_ASYNC_DATABASE_URI: str | None = None
     SQLALCHEMY_ECHO:               bool       = False
     DATABASE_CREATE_TABLES:        bool       = True
+
+    # ---------------------------------------------------------------------------
+    # Identity / JWT
+    # ---------------------------------------------------------------------------
+
+    JWT_SECRET_KEY: SecretStr = Field(
+        default=SecretStr("development-only-change-me-at-least-32-chars"),
+        min_length=32,
+    )
+    JWT_ISSUER:        str = "wdl-identity"
+    JWT_AUDIENCE:      str = "wdl-api"
+    IDENTITY_TOKEN_URL: str = "http://localhost:8002/oauth/token"
 
     @model_validator(mode="after")
     def assemble_database_uri(self) -> "Settings":

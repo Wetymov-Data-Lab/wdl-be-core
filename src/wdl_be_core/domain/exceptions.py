@@ -16,3 +16,11 @@ class InvalidRealmNameError(DomainError):
 
 class RealmAlreadyExistsError(DomainError):
     """A realm with the same name already exists."""
+
+
+class AuthenticationError(Exception):
+    """The caller did not provide a valid identity access token."""
+
+
+class AuthorizationError(Exception):
+    """The authenticated caller cannot access the requested resource."""
