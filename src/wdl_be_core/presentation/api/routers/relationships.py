@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from wdl_shared.schemas.engine.models.database import (
@@ -15,29 +15,28 @@ from wdl_shared.schemas.engine.models.database import (
     RelationshipUpdateModel,
 )
 
+from wdl_be_core.application.authorization import AuthorizationService
 from wdl_be_core.application.identity import CurrentUser
 from wdl_be_core.domain.exceptions import EntityNotFoundError
 from wdl_be_core.infrastructure.database.models.database import (
-    Columns,
-    Databases,
     DiagramIndexColumns,
     DiagramIndexes,
     RelationshipColumns,
     Relationships,
-    Tables,
 )
 from wdl_be_core.presentation.api.dependencies.authentication import get_current_user
+from wdl_be_core.presentation.api.dependencies.authorization import get_authorization_service
 from wdl_be_core.presentation.api.dependencies.database import get_database_session
 from wdl_be_core.presentation.api.routers.crud import (
     apply_values,
     commit_or_conflict,
     flush_or_conflict,
-    get_or_404,
 )
 
 router = APIRouter(tags=["database relationships"], dependencies=[Depends(get_current_user)])
 DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
+Authorization = Annotated[AuthorizationService, Depends(get_authorization_service)]
 
 
 async def index_response(session: AsyncSession, index: DiagramIndexes) -> IndexResponseModel:
@@ -105,7 +104,10 @@ async def relationship_response(
 
 
 @router.get("/indexes/", response_model=list[IndexResponseModel])
-async def list_indexes(table_id: UUID, session: DatabaseSession) -> list[IndexResponseModel]:
+async def list_indexes(
+    table_id: UUID, session: DatabaseSession, authorization: Authorization
+) -> list[IndexResponseModel]:
+    await authorization.require_table(table_id)
     indexes = (
         await session.scalars(
             select(DiagramIndexes)
@@ -117,18 +119,24 @@ async def list_indexes(table_id: UUID, session: DatabaseSession) -> list[IndexRe
 
 
 @router.get("/indexes/{index_id}", response_model=IndexResponseModel)
-async def get_index(index_id: UUID, session: DatabaseSession) -> IndexResponseModel:
-    index = await get_or_404(session, DiagramIndexes, index_id)
+async def get_index(
+    index_id: UUID, session: DatabaseSession, authorization: Authorization
+) -> IndexResponseModel:
+    index = await authorization.require_index(index_id)
     return await index_response(session, index)
 
 
 @router.post("/indexes/", response_model=IndexResponseModel, status_code=status.HTTP_201_CREATED)
 async def create_index(
-    body: IndexCreateModel, session: DatabaseSession, user: AuthenticatedUser
+    request: Request,
+    body: IndexCreateModel,
+    session: DatabaseSession,
+    user: AuthenticatedUser,
+    authorization: Authorization,
 ) -> IndexResponseModel:
-    await get_or_404(session, Tables, body.table_id)
+    await authorization.require_table(body.table_id)
     for column_item in body.columns:
-        column = await get_or_404(session, Columns, column_item.column_id)
+        column = await authorization.require_column(column_item.column_id)
         if column.table_id != body.table_id:
             raise EntityNotFoundError(
                 f"Column {column.id} does not belong to table {body.table_id}"
@@ -150,6 +158,7 @@ async def create_index(
     )
     await commit_or_conflict(session, "Index contains duplicate columns or positions")
     await session.refresh(index)
+    request.state.audit_resource_id = str(index.id)
     return await index_response(session, index)
 
 
@@ -158,10 +167,11 @@ async def update_index(
     index_id: UUID,
     body: IndexUpdateModel,
     session: DatabaseSession,
+    authorization: Authorization,
 ) -> IndexResponseModel:
-    index = await get_or_404(session, DiagramIndexes, index_id)
+    index = await authorization.require_index(index_id)
     for column_item in body.columns:
-        column = await get_or_404(session, Columns, column_item.column_id)
+        column = await authorization.require_column(column_item.column_id)
         if column.table_id != index.table_id:
             raise EntityNotFoundError(
                 f"Column {column.id} does not belong to table {index.table_id}"
@@ -185,10 +195,12 @@ async def update_index(
 
 
 @router.delete("/indexes/{index_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_index(index_id: UUID, session: DatabaseSession) -> Response:
-    index = await get_or_404(session, DiagramIndexes, index_id)
+async def delete_index(
+    index_id: UUID, session: DatabaseSession, authorization: Authorization
+) -> Response:
+    index = await authorization.require_index(index_id)
     await session.delete(index)
-    await session.commit()
+    await session.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -196,7 +208,9 @@ async def delete_index(index_id: UUID, session: DatabaseSession) -> Response:
 async def list_relationships(
     database_id: UUID,
     session: DatabaseSession,
+    authorization: Authorization,
 ) -> list[RelationshipResponseModel]:
+    await authorization.require_database(database_id)
     relationships = (
         await session.scalars(
             select(Relationships)
@@ -211,8 +225,9 @@ async def list_relationships(
 async def get_relationship(
     relationship_id: UUID,
     session: DatabaseSession,
+    authorization: Authorization,
 ) -> RelationshipResponseModel:
-    relationship = await get_or_404(session, Relationships, relationship_id)
+    relationship = await authorization.require_relationship(relationship_id)
     return await relationship_response(session, relationship)
 
 
@@ -222,18 +237,20 @@ async def get_relationship(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_relationship(
+    request: Request,
     body: RelationshipCreateModel,
     session: DatabaseSession,
     user: AuthenticatedUser,
+    authorization: Authorization,
 ) -> RelationshipResponseModel:
-    await get_or_404(session, Databases, body.database_id)
-    source_table = await get_or_404(session, Tables, body.source_table_id)
-    target_table = await get_or_404(session, Tables, body.target_table_id)
+    await authorization.require_database(body.database_id)
+    source_table = await authorization.require_table(body.source_table_id)
+    target_table = await authorization.require_table(body.target_table_id)
     if source_table.database_id != body.database_id or target_table.database_id != body.database_id:
         raise EntityNotFoundError("Relationship tables must belong to the requested database")
     for column_pair in body.columns:
-        source_column = await get_or_404(session, Columns, column_pair.source_column_id)
-        target_column = await get_or_404(session, Columns, column_pair.target_column_id)
+        source_column = await authorization.require_column(column_pair.source_column_id)
+        target_column = await authorization.require_column(column_pair.target_column_id)
         if (
             source_column.table_id != body.source_table_id
             or target_column.table_id != body.target_table_id
@@ -256,6 +273,7 @@ async def create_relationship(
     )
     await commit_or_conflict(session, "Relationship contains duplicate column mappings")
     await session.refresh(relationship)
+    request.state.audit_resource_id = str(relationship.id)
     return await relationship_response(session, relationship)
 
 
@@ -267,11 +285,12 @@ async def update_relationship(
     relationship_id: UUID,
     body: RelationshipUpdateModel,
     session: DatabaseSession,
+    authorization: Authorization,
 ) -> RelationshipResponseModel:
-    relationship = await get_or_404(session, Relationships, relationship_id)
+    relationship = await authorization.require_relationship(relationship_id)
     for column_pair in body.columns:
-        source_column = await get_or_404(session, Columns, column_pair.source_column_id)
-        target_column = await get_or_404(session, Columns, column_pair.target_column_id)
+        source_column = await authorization.require_column(column_pair.source_column_id)
+        target_column = await authorization.require_column(column_pair.target_column_id)
         if (
             source_column.table_id != relationship.source_table_id
             or target_column.table_id != relationship.target_table_id
@@ -302,8 +321,9 @@ async def update_relationship(
 async def delete_relationship(
     relationship_id: UUID,
     session: DatabaseSession,
+    authorization: Authorization,
 ) -> Response:
-    relationship = await get_or_404(session, Relationships, relationship_id)
+    relationship = await authorization.require_relationship(relationship_id)
     await session.delete(relationship)
-    await session.commit()
+    await session.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

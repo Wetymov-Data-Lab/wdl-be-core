@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 
 from wdl_be_core.application.identity import AccessTokenVerifier, CurrentUser
@@ -20,9 +20,12 @@ def get_access_token_verifier() -> AccessTokenVerifier:
 
 
 async def get_current_user(
+    request: Request,
     bearer_token: Annotated[str | None, Depends(oauth2_scheme)],
     verifier: Annotated[AccessTokenVerifier, Depends(get_access_token_verifier)],
 ) -> CurrentUser:
     if not bearer_token:
         raise AuthenticationError("Bearer token is required")
-    return verifier.verify(bearer_token)
+    user = verifier.verify(bearer_token)
+    request.state.audit_actor_id = str(user.account_id)
+    return user

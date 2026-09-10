@@ -2,7 +2,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from loguru import logger
 
+from observability.logger import setup_logging
 from wdl_be_core.infrastructure.config import settings
 from wdl_be_core.infrastructure.cors import disable_cors_debug, production_cors
 from wdl_be_core.infrastructure.database.session import create_tables, engine
@@ -12,13 +14,17 @@ from wdl_be_core.presentation.api.swagger.docs import setup_docs_routes
 from wdl_be_core.presentation.api.swagger.openapi import custom_openapi
 from wdl_be_core.presentation.api.swagger.swagger import servers, tags_metadata
 
+setup_logging()
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    logger.info("Starting {} v{}", settings.PROJECT_NAME, settings.APP_VERSION)
     if settings.DATABASE_CREATE_TABLES:
         await create_tables()
     yield
     await engine.dispose()
+    logger.info("{} stopped", settings.PROJECT_NAME)
 
 
 def create_app() -> FastAPI:
@@ -26,7 +32,7 @@ def create_app() -> FastAPI:
         title=settings.PROJECT_NAME,
         description=settings.PROJECT_DESC,
         version=settings.APP_VERSION,
-        debug=bool(settings.DEBUG),
+        debug=settings.DEBUG,
         openapi_tags=tags_metadata,
         servers=servers,
         docs_url=None,

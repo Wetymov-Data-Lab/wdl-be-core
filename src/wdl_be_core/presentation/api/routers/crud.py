@@ -21,7 +21,7 @@ async def get_or_404[ModelT: Base](
 
 async def commit_or_conflict(session: AsyncSession, detail: str) -> None:
     try:
-        await session.commit()
+        await session.flush()
     except IntegrityError as error:
         await session.rollback()
         raise EntityAlreadyExistsError(detail) from error

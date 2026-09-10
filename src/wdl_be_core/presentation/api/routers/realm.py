@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from wdl_shared.schemas.engine.models.realms import RealmResponseModel
 
 from wdl_be_core.application.identity import CurrentUser
@@ -61,7 +61,7 @@ async def get_realm(realm_id: UUID, uow: RealmUow, user: AuthenticatedUser) -> R
 
 @router.post("/", response_model=RealmResponseModel, status_code=status.HTTP_201_CREATED)
 async def create_realm(
-    body: RealmCreateRequestModel, uow: RealmUow, user: AuthenticatedUser
+    request: Request, body: RealmCreateRequestModel, uow: RealmUow, user: AuthenticatedUser
 ) -> RealmResponseModel:
     realm = await CreateRealm(uow).execute(
         CreateRealmRequest(
@@ -74,6 +74,7 @@ async def create_realm(
             author_id=user.account_id,
         )
     )
+    request.state.audit_resource_id = str(realm.id)
     return to_response(realm)
 
 
