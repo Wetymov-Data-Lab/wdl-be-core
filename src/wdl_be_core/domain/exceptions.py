@@ -24,3 +24,7 @@ class AuthenticationError(Exception):
 
 class AuthorizationError(Exception):
     """The authenticated caller cannot access the requested resource."""
+
+
+class SqlExportError(DomainError):
+    """The ER model cannot be represented by the supported SQL dialect."""

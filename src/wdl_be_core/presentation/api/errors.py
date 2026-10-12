@@ -9,6 +9,7 @@ from wdl_be_core.domain.exceptions import (
     EntityNotFoundError,
     InvalidRealmNameError,
     RealmAlreadyExistsError,
+    SqlExportError,
 )
 
 
@@ -34,10 +35,11 @@ def setup_exception_handlers(app: FastAPI) -> None:
     async def conflict(_: Request, error: RealmAlreadyExistsError) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(error)})
 
+    @app.exception_handler(SqlExportError)
     @app.exception_handler(InvalidRealmNameError)
     async def invalid_name(_: Request, error: InvalidRealmNameError) -> JSONResponse:
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             content={"detail": str(error)},
         )
 
