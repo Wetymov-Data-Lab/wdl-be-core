@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from common.transaction_manager import TransactionManagerBase
 from wdl_be_core.infrastructure.config import get_settings
 from wdl_be_core.infrastructure.database.base import Base
 
@@ -23,6 +24,7 @@ async def create_tables() -> None:
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+        await connection.run_sync(TransactionManagerBase.metadata.create_all)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
