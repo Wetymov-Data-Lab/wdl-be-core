@@ -7,8 +7,9 @@ import asyncpg
 import pytest
 from fastapi.testclient import TestClient
 
-from common.services.identity import CurrentUser
 from common.exceptions.exceptions import SqlExportError
+from common.services.identity import CurrentUser
+from context.infrastructure.guards.authentication import get_current_user
 from context.infrastructure.schemas.database import (
     Columns,
     Databases,
@@ -19,9 +20,8 @@ from context.infrastructure.schemas.database import (
     Tables,
 )
 from context.infrastructure.services.sql_export import SqlDiagram, generate_postgresql_sql
-from main import create_app
-from context.infrastructure.guards.authentication import get_current_user
 from infrastructure.database.dependencies import get_database_session
+from main import create_app
 
 
 def column(table_id: UUID, number: int, name: str, **options: object) -> Columns:

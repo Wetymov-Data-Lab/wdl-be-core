@@ -4,10 +4,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from context.infrastructure.services.authorization import AuthorizationService
-from context.infrastructure.services.sql_export import generate_postgresql_sql, load_sql_diagram
 from context.infrastructure.guards.authentication import get_current_user
 from context.infrastructure.guards.authorization import get_authorization_service
+from context.infrastructure.services.authorization import AuthorizationService
+from context.infrastructure.services.sql_export import generate_postgresql_sql, load_sql_diagram
 from infrastructure.database.dependencies import get_database_session
 
 router = APIRouter(tags=["database schema"], dependencies=[Depends(get_current_user)])

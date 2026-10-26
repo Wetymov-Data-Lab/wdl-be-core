@@ -37,7 +37,7 @@ API в Docker будет доступно по адресу `http://localhost:80
 |---------------------------------|-------------------------------------------------|---------------------------------------------------------------------|
 | `make env`                      | Создать `.env` из `.env.example`                | `[ -f .env.example ] && cp -f .env.example .env \|\| echo '.env.example not found'` |
 | `make install`                  | Синхронизировать зависимости всех групп         | `uv sync --all-groups`                                              |
-| `make dev`                      | Запустить API с автоматической перезагрузкой    | `uv run uvicorn main:app --reload`                      |
+| `make dev`                      | Запустить API с автоматической перезагрузкой    | `uv run uvicorn main:app --reload`                                  |
 | `make lint`                     | Проверить код с помощью Ruff                    | `uv run ruff check .`                                               |
 | `make format`                   | Отформатировать код с помощью Ruff              | `uv run ruff format .`                                              |
 | `make typecheck`                | Проверить типы с помощью mypy                    | `uv run mypy src`                                                   |
