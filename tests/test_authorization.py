@@ -3,8 +3,8 @@ from uuid import uuid4
 
 import pytest
 
-from wdl_be_core.application.authorization import AuthorizationService
-from wdl_be_core.domain.exceptions import EntityNotFoundError
+from common.exceptions.exceptions import EntityNotFoundError
+from context.infrastructure.services.authorization import AuthorizationService
 
 
 def test_owned_resource_queries_include_realm_boundary() -> None:

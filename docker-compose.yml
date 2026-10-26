@@ -12,7 +12,6 @@ services:
       - "${API_EXPOSE_PORT:?API_EXPOSE_PORT is required}:8000"
     volumes:
       - ./src:/workspace/wdl-be-core/src
-      - ./migrations:/workspace/wdl-be-core/migrations
       - ../wdl-shared/src:/workspace/wdl-shared/src
     networks:
       - vendor-network

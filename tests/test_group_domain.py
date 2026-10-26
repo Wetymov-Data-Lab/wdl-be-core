@@ -3,8 +3,8 @@ from uuid import uuid4
 
 import pytest
 
-from wdl_be_core.domain.entities.group import DiagramGroup
-from wdl_be_core.domain.exceptions import AuthorizationError, DomainError
+from common.exceptions.exceptions import AuthorizationError, DomainError
+from context.domain.entities.group import DiagramGroup
 
 
 def make_group() -> DiagramGroup:

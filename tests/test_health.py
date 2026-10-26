@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from wdl_be_core.main import app
+from main import app
 
 
 def test_health() -> None:

@@ -1,0 +1,1 @@
+"""Write-side use cases."""

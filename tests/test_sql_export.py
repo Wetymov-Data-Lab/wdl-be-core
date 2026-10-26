@@ -7,9 +7,9 @@ import asyncpg
 import pytest
 from fastapi.testclient import TestClient
 
-from wdl_be_core.application.identity import CurrentUser
-from wdl_be_core.domain.exceptions import SqlExportError
-from wdl_be_core.infrastructure.database.models.database import (
+from common.services.identity import CurrentUser
+from common.exceptions.exceptions import SqlExportError
+from context.infrastructure.schemas.database import (
     Columns,
     Databases,
     DiagramIndexColumns,
@@ -18,10 +18,10 @@ from wdl_be_core.infrastructure.database.models.database import (
     Relationships,
     Tables,
 )
-from wdl_be_core.infrastructure.sql_export import SqlDiagram, generate_postgresql_sql
-from wdl_be_core.main import create_app
-from wdl_be_core.presentation.api.dependencies.authentication import get_current_user
-from wdl_be_core.presentation.api.dependencies.database import get_database_session
+from context.infrastructure.services.sql_export import SqlDiagram, generate_postgresql_sql
+from main import create_app
+from context.infrastructure.guards.authentication import get_current_user
+from infrastructure.database.dependencies import get_database_session
 
 
 def column(table_id: UUID, number: int, name: str, **options: object) -> Columns:

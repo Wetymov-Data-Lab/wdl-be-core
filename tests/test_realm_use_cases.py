@@ -3,26 +3,24 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from wdl_be_core.application.services.realm import (
+from common.exceptions.exceptions import EntityNotFoundError, RealmAlreadyExistsError
+from context.application.commands.realm import (
     CreateRealm,
     CreateRealmRequest,
     DeleteRealm,
     DeleteRealmRequest,
-    GetRealm,
-    GetRealmRequest,
-    ListRealms,
     UpdateRealm,
     UpdateRealmRequest,
 )
-from wdl_be_core.domain.entities.realm import (
+from context.application.queries.realm import GetRealm, GetRealmRequest, ListRealms
+from context.domain.entities.realm import (
     Realm,
     RealmName,
     RealmSlug,
     RealmStatus,
     RealmVisibility,
 )
-from wdl_be_core.domain.exceptions import EntityNotFoundError, RealmAlreadyExistsError
-from wdl_be_core.domain.repositories.realm import RealmRepository, RealmUnitOfWork
+from context.infrastructure.repositories.realm_contract import RealmRepository, RealmUnitOfWork
 
 
 class FakeRealmRepository(RealmRepository):

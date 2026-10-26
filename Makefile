@@ -7,7 +7,7 @@ install:
 	uv sync --all-groups
 
 dev:
-	uv run uvicorn wdl_be_core.main:app --reload
+	uv run uvicorn main:app --reload
 
 lint:
 	uv run ruff check .

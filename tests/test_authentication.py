@@ -5,9 +5,9 @@ import jwt
 import pytest
 from fastapi.testclient import TestClient
 
-from wdl_be_core.domain.exceptions import AuthenticationError
-from wdl_be_core.infrastructure.identity import JWTAccessTokenVerifier
-from wdl_be_core.main import app
+from common.exceptions.exceptions import AuthenticationError
+from common.services.jwt import JWTAccessTokenVerifier
+from main import app
 
 SECRET = "test-secret-key-that-is-long-enough"
 

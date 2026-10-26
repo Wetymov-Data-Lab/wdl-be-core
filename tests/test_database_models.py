@@ -5,9 +5,9 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 from wdl_shared.schemas.engine.models import TableResponseModel
 
-import wdl_be_core.infrastructure.database.models  # noqa: F401
-from wdl_be_core.infrastructure.database.base import Base
-from wdl_be_core.infrastructure.database.models.database import Tables
+import context.infrastructure.schemas  # noqa: F401
+from context.infrastructure.schemas.database import Tables
+from infrastructure.database.base import Base
 
 EXPECTED_TABLES = {
     "canvas_states",

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from wdl_be_core.infrastructure.config import Settings
+from common.config import Settings
 
 
 def test_boolean_settings_are_parsed_from_strings() -> None:

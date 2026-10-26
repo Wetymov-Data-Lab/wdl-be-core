@@ -1,7 +1,7 @@
 from wdl_shared.schemas.engine.enums import ColumnType, DataBaseName, RealmVisibility
 
-from wdl_be_core.main import create_app
-from wdl_be_core.presentation.api.routers.enums import get_enum_catalog
+from context.interface.controllers.enums import get_enum_catalog
+from main import create_app
 
 EXPECTED_DIAGRAM_ROUTES = {
     "/canvas/{database_id}",
