@@ -75,6 +75,9 @@ class GroupRepository(AbstractGroupRepository):
                 updated_at=entity.updated_at,
             )
         )
+        # Without a relationship() the unit of work does not order these inserts by the
+        # foreign key, so the group row must reach the database before its memberships.
+        await self._session.flush()
         self._session.add_all(
             DiagramGroupTables(id=uuid4(), group_id=entity.id, table_id=table_id)
             for table_id in entity.table_ids
