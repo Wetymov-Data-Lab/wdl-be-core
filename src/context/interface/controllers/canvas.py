@@ -1,50 +1,55 @@
-from typing import Annotated, cast
-from uuid import UUID, uuid4
+from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from wdl_shared.schemas.engine.models.canvas import (
     CanvasStateModel,
     DiagramGroupModel,
     DiagramNoteModel,
 )
 
-from common.exceptions.exceptions import DomainError, EntityNotFoundError
+from common.exceptions.exceptions import DomainError
 from common.services.identity import CurrentUser
-from context.application.commands.group import (
+from context.application.services.canvas_state import (
+    GetCanvasState,
+    GetCanvasStateRequest,
+    SaveCanvasState,
+    SaveCanvasStateRequest,
+)
+from context.application.services.group import (
     CreateGroup,
     CreateGroupRequest,
     DeleteGroup,
     DeleteGroupRequest,
+    ListGroups,
     UpdateGroup,
     UpdateGroupRequest,
 )
-from context.application.queries.group import ListGroups
+from context.application.services.note import (
+    CreateNote,
+    CreateNoteRequest,
+    DeleteNote,
+    ListNotes,
+    NoteRequest,
+    UpdateNote,
+    UpdateNoteRequest,
+)
+from context.domain.entities.canvas_state import CanvasPreferences, CanvasState
 from context.domain.entities.group import DiagramGroup
+from context.domain.entities.note import DiagramNote, NoteAttributes
 from context.infrastructure.guards.authentication import get_current_user
 from context.infrastructure.guards.authorization import get_authorization_service
 from context.infrastructure.repositories.dependencies import get_realm_uow
 from context.infrastructure.repositories.unit_of_work import SQLAlchemyUnitOfWork
-from context.infrastructure.schemas.canvas import (
-    CanvasStates,
-    DiagramNotes,
-)
 from context.infrastructure.services.authorization import AuthorizationService
-from context.interface.controllers.crud import (
-    commit_or_conflict,
-    get_or_404,
-)
-from infrastructure.database.dependencies import get_database_session
 
 router = APIRouter(prefix="/canvas", tags=["canvas"], dependencies=[Depends(get_current_user)])
-DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
-GroupUow = Annotated[SQLAlchemyUnitOfWork, Depends(get_realm_uow)]
+CanvasUow = Annotated[SQLAlchemyUnitOfWork, Depends(get_realm_uow)]
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 Authorization = Annotated[AuthorizationService, Depends(get_authorization_service)]
 
 
-def canvas_response(state: CanvasStates) -> CanvasStateModel:
+def canvas_response(state: CanvasState) -> CanvasStateModel:
     return CanvasStateModel(
         database_id=state.database_id,
         user_id=state.user_id,
@@ -69,7 +74,7 @@ def group_response(group: DiagramGroup) -> DiagramGroupModel:
     )
 
 
-def note_response(note: DiagramNotes) -> DiagramNoteModel:
+def note_response(note: DiagramNote) -> DiagramNoteModel:
     return DiagramNoteModel(
         id=note.id,
         database_id=note.database_id,
@@ -81,31 +86,26 @@ def note_response(note: DiagramNotes) -> DiagramNoteModel:
     )
 
 
-async def find_canvas_state(
-    session: AsyncSession,
-    database_id: UUID,
-    user_id: UUID | None,
-) -> CanvasStates | None:
-    query = select(CanvasStates).where(CanvasStates.database_id == database_id)
-    query = (
-        query.where(CanvasStates.user_id.is_(None))
-        if user_id is None
-        else query.where(CanvasStates.user_id == user_id)
+def note_attributes(body: DiagramNoteModel) -> NoteAttributes:
+    return NoteAttributes(
+        text=body.text,
+        position=body.position,
+        width=body.width,
+        height=body.height,
+        color=body.color,
     )
-    return cast(CanvasStates | None, await session.scalar(query))
 
 
 @router.get("/{database_id}", response_model=CanvasStateModel)
 async def get_canvas_state(
     database_id: UUID,
-    session: DatabaseSession,
+    uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
 ) -> CanvasStateModel:
-    await authorization.require_database(database_id)
-    state = await find_canvas_state(session, database_id, user.account_id)
-    if state is None:
-        raise EntityNotFoundError(f"Canvas state for database {database_id} was not found")
+    state = await GetCanvasState(uow, authorization).execute(
+        GetCanvasStateRequest(database_id=database_id, account_id=user.account_id)
+    )
     return canvas_response(state)
 
 
@@ -113,32 +113,32 @@ async def get_canvas_state(
 async def save_canvas_state(
     database_id: UUID,
     body: CanvasStateModel,
-    session: DatabaseSession,
+    uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
 ) -> CanvasStateModel:
     if body.database_id != database_id:
         raise DomainError("Path database_id must match body database_id")
-    await authorization.require_database(database_id)
-    if body.user_id not in (None, user.account_id):
-        raise DomainError("Canvas user_id must match the authenticated account")
-    state = await find_canvas_state(session, database_id, user.account_id)
-    if state is None:
-        state = CanvasStates(id=uuid4(), database_id=database_id, user_id=user.account_id)
-        session.add(state)
-    state.viewport = body.viewport
-    state.grid_size = body.grid_size
-    state.snap_to_grid = body.snap_to_grid
-    state.show_relationship_labels = body.show_relationship_labels
-    await commit_or_conflict(session, "Canvas state already exists")
-    await session.refresh(state)
+    state = await SaveCanvasState(uow, authorization).execute(
+        SaveCanvasStateRequest(
+            database_id=database_id,
+            account_id=user.account_id,
+            requested_user_id=body.user_id,
+            preferences=CanvasPreferences(
+                viewport=body.viewport,
+                grid_size=body.grid_size,
+                snap_to_grid=body.snap_to_grid,
+                show_relationship_labels=body.show_relationship_labels,
+            ),
+        )
+    )
     return canvas_response(state)
 
 
 @router.get("/{database_id}/groups", response_model=list[DiagramGroupModel])
 async def list_groups(
     database_id: UUID,
-    uow: GroupUow,
+    uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
 ) -> list[DiagramGroupModel]:
@@ -156,7 +156,7 @@ async def create_group(
     request: Request,
     database_id: UUID,
     body: DiagramGroupModel,
-    uow: GroupUow,
+    uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
 ) -> DiagramGroupModel:
@@ -187,7 +187,7 @@ async def update_group(
     database_id: UUID,
     group_id: UUID,
     body: DiagramGroupModel,
-    uow: GroupUow,
+    uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
 ) -> DiagramGroupModel:
@@ -219,7 +219,7 @@ async def update_group(
 async def delete_group(
     database_id: UUID,
     group_id: UUID,
-    uow: GroupUow,
+    uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
 ) -> Response:
@@ -237,17 +237,10 @@ async def delete_group(
 @router.get("/{database_id}/notes", response_model=list[DiagramNoteModel])
 async def list_notes(
     database_id: UUID,
-    session: DatabaseSession,
+    uow: CanvasUow,
     authorization: Authorization,
 ) -> list[DiagramNoteModel]:
-    await authorization.require_database(database_id)
-    notes = (
-        await session.scalars(
-            select(DiagramNotes)
-            .where(DiagramNotes.database_id == database_id)
-            .order_by(DiagramNotes.created_at)
-        )
-    ).all()
+    notes = await ListNotes(uow, authorization).execute(database_id)
     return [note_response(note) for note in notes]
 
 
@@ -260,26 +253,20 @@ async def create_note(
     request: Request,
     database_id: UUID,
     body: DiagramNoteModel,
-    session: DatabaseSession,
+    uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
 ) -> DiagramNoteModel:
     if body.database_id != database_id:
         raise DomainError("Path database_id must match body database_id")
-    await authorization.require_database(database_id)
-    note = DiagramNotes(
-        id=body.id,
-        database_id=database_id,
-        text=body.text,
-        width=body.width,
-        height=body.height,
-        color=body.color,
-        author_id=user.account_id,
+    note = await CreateNote(uow, authorization).execute(
+        CreateNoteRequest(
+            database_id=database_id,
+            note_id=body.id,
+            attributes=note_attributes(body),
+            author_id=user.account_id,
+        )
     )
-    note.position = body.position
-    session.add(note)
-    await commit_or_conflict(session, f"Diagram note {body.id} already exists")
-    await session.refresh(note)
     request.state.audit_resource_id = str(note.id)
     return note_response(note)
 
@@ -289,22 +276,18 @@ async def update_note(
     database_id: UUID,
     note_id: UUID,
     body: DiagramNoteModel,
-    session: DatabaseSession,
+    uow: CanvasUow,
     authorization: Authorization,
 ) -> DiagramNoteModel:
     if body.id != note_id or body.database_id != database_id:
         raise DomainError("Path identifiers must match body identifiers")
-    await authorization.require_database(database_id)
-    note = await get_or_404(session, DiagramNotes, note_id)
-    if note.database_id != database_id:
-        raise EntityNotFoundError(f"DiagramNotes {note_id} was not found")
-    note.text = body.text
-    note.position = body.position
-    note.width = body.width
-    note.height = body.height
-    note.color = body.color
-    await session.flush()
-    await session.refresh(note)
+    note = await UpdateNote(uow, authorization).execute(
+        UpdateNoteRequest(
+            database_id=database_id,
+            note_id=note_id,
+            attributes=note_attributes(body),
+        )
+    )
     return note_response(note)
 
 
@@ -315,13 +298,10 @@ async def update_note(
 async def delete_note(
     database_id: UUID,
     note_id: UUID,
-    session: DatabaseSession,
+    uow: CanvasUow,
     authorization: Authorization,
 ) -> Response:
-    await authorization.require_database(database_id)
-    note = await get_or_404(session, DiagramNotes, note_id)
-    if note.database_id != database_id:
-        raise EntityNotFoundError(f"DiagramNotes {note_id} was not found")
-    await session.delete(note)
-    await session.flush()
+    await DeleteNote(uow, authorization).execute(
+        NoteRequest(database_id=database_id, note_id=note_id)
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -5,15 +5,17 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from wdl_shared.schemas.engine.models.realms import RealmResponseModel
 
 from common.services.identity import CurrentUser
-from context.application.commands.realm import (
+from context.application.services.realm import (
     CreateRealm,
     CreateRealmRequest,
     DeleteRealm,
     DeleteRealmRequest,
+    GetRealm,
+    GetRealmRequest,
+    ListRealms,
     UpdateRealm,
     UpdateRealmRequest,
 )
-from context.application.queries.realm import GetRealm, GetRealmRequest, ListRealms
 from context.domain.entities.realm import Realm, RealmStatus, RealmVisibility
 from context.infrastructure.guards.authentication import get_current_user
 from context.infrastructure.repositories.dependencies import get_realm_uow

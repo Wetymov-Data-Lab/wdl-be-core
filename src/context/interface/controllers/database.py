@@ -1,9 +1,7 @@
 from typing import Annotated
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from wdl_shared.schemas.engine.models.database import (
     ColumnCreateModel,
     ColumnResponseModel,
@@ -17,36 +15,113 @@ from wdl_shared.schemas.engine.models.database import (
 )
 
 from common.services.identity import CurrentUser
+from context.application.services.column import (
+    CreateColumn,
+    CreateColumnRequest,
+    DeleteColumn,
+    GetColumn,
+    ListColumns,
+    UpdateColumn,
+    UpdateColumnRequest,
+)
+from context.application.services.database import (
+    CreateDatabase,
+    CreateDatabaseRequest,
+    DeleteDatabase,
+    GetDatabase,
+    ListDatabases,
+    ListDatabasesRequest,
+    UpdateDatabase,
+    UpdateDatabaseRequest,
+)
+from context.application.services.table import (
+    CreateTable,
+    CreateTableRequest,
+    DeleteTable,
+    GetTable,
+    ListTables,
+    UpdateTable,
+    UpdateTableRequest,
+)
+from context.domain.entities.column import ColumnAttributes
+from context.domain.entities.database import DatabaseAttributes
+from context.domain.entities.table import TableAttributes
 from context.infrastructure.guards.authentication import get_current_user
 from context.infrastructure.guards.authorization import get_authorization_service
-from context.infrastructure.schemas.database import Columns, Databases, Tables
+from context.infrastructure.repositories.dependencies import get_realm_uow
+from context.infrastructure.repositories.unit_of_work import SQLAlchemyUnitOfWork
 from context.infrastructure.services.authorization import AuthorizationService
-from context.interface.controllers.crud import (
-    apply_values,
-    commit_or_conflict,
-)
-from infrastructure.database.dependencies import get_database_session
 
 router = APIRouter(tags=["database schema"], dependencies=[Depends(get_current_user)])
-DatabaseSession = Annotated[AsyncSession, Depends(get_database_session)]
+SchemaUow = Annotated[SQLAlchemyUnitOfWork, Depends(get_realm_uow)]
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 Authorization = Annotated[AuthorizationService, Depends(get_authorization_service)]
 
 
+def database_attributes(body: DatabaseCreateModel | DatabaseUpdateModel) -> DatabaseAttributes:
+    return DatabaseAttributes(
+        name=body.name,
+        type=body.type,
+        notice=body.notice,
+        default_schema=body.default_schema,
+        charset=body.charset,
+        collation=body.collation,
+    )
+
+
+def table_attributes(body: TableCreateModel | TableUpdateModel) -> TableAttributes:
+    return TableAttributes(
+        name=body.name,
+        schema_name=body.schema_name,
+        description=body.description,
+        notice=body.notice,
+        color=body.color,
+        position=body.position,
+        width=body.width,
+        is_collapsed=body.is_collapsed,
+        sort_order=body.sort_order,
+    )
+
+
+def column_attributes(body: ColumnCreateModel | ColumnUpdateModel) -> ColumnAttributes:
+    return ColumnAttributes(
+        name=body.name,
+        type=body.type,
+        custom_type=body.custom_type,
+        length=body.length,
+        precision=body.precision,
+        scale=body.scale,
+        array_dimensions=body.array_dimensions,
+        nullable=body.nullable,
+        primary_key=body.primary_key,
+        unique=body.unique,
+        auto_increment=body.auto_increment,
+        unsigned=body.unsigned,
+        default=body.default,
+        check=body.check,
+        enum_values=list(body.enum_values),
+        sort_order=body.sort_order,
+        notice=body.notice,
+    )
+
+
 @router.get("/databases/", response_model=list[DatabaseResponseModel])
 async def list_databases(
-    session: DatabaseSession,
-    authorization: Authorization,
+    uow: SchemaUow,
+    user: AuthenticatedUser,
     project_id: UUID | None = None,
 ) -> list[DatabaseResponseModel]:
-    query = authorization.databases(project_id).order_by(Databases.created_at)
-    databases = (await session.scalars(query)).all()
+    databases = await ListDatabases(uow).execute(
+        ListDatabasesRequest(account_id=user.account_id, project_id=project_id)
+    )
     return [DatabaseResponseModel.model_validate(database) for database in databases]
 
 
 @router.get("/databases/{database_id}", response_model=DatabaseResponseModel)
-async def get_database(database_id: UUID, authorization: Authorization) -> DatabaseResponseModel:
-    database = await authorization.require_database(database_id)
+async def get_database(
+    database_id: UUID, uow: SchemaUow, authorization: Authorization
+) -> DatabaseResponseModel:
+    database = await GetDatabase(uow, authorization).execute(database_id)
     return DatabaseResponseModel.model_validate(database)
 
 
@@ -58,19 +133,17 @@ async def get_database(database_id: UUID, authorization: Authorization) -> Datab
 async def create_database(
     request: Request,
     body: DatabaseCreateModel,
-    session: DatabaseSession,
+    uow: SchemaUow,
     user: AuthenticatedUser,
     authorization: Authorization,
 ) -> DatabaseResponseModel:
-    await authorization.require_project(body.project_id)
-    database = Databases(
-        id=uuid4(),
-        author_id=user.account_id,
-        **body.model_dump(exclude={"author_id"}),
+    database = await CreateDatabase(uow, authorization).execute(
+        CreateDatabaseRequest(
+            project_id=body.project_id,
+            attributes=database_attributes(body),
+            author_id=user.account_id,
+        )
     )
-    session.add(database)
-    await commit_or_conflict(session, f"Database '{body.name}' already exists in this project")
-    await session.refresh(database)
     request.state.audit_resource_id = str(database.id)
     return DatabaseResponseModel.model_validate(database)
 
@@ -79,46 +152,38 @@ async def create_database(
 async def update_database(
     database_id: UUID,
     body: DatabaseUpdateModel,
-    session: DatabaseSession,
+    uow: SchemaUow,
     authorization: Authorization,
 ) -> DatabaseResponseModel:
-    database = await authorization.require_database(database_id)
-    apply_values(database, body.model_dump())
-    await commit_or_conflict(session, f"Database '{body.name}' already exists in this project")
-    await session.refresh(database)
+    database = await UpdateDatabase(uow, authorization).execute(
+        UpdateDatabaseRequest(database_id=database_id, attributes=database_attributes(body))
+    )
     return DatabaseResponseModel.model_validate(database)
 
 
 @router.delete("/databases/{database_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_database(
-    database_id: UUID, session: DatabaseSession, authorization: Authorization
+    database_id: UUID, uow: SchemaUow, authorization: Authorization
 ) -> Response:
-    database = await authorization.require_database(database_id)
-    await session.delete(database)
-    await session.flush()
+    await DeleteDatabase(uow, authorization).execute(database_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/tables/", response_model=list[TableResponseModel])
 async def list_tables(
     database_id: UUID,
-    session: DatabaseSession,
+    uow: SchemaUow,
     authorization: Authorization,
 ) -> list[TableResponseModel]:
-    await authorization.require_database(database_id)
-    tables = (
-        await session.scalars(
-            select(Tables)
-            .where(Tables.database_id == database_id)
-            .order_by(Tables.sort_order, Tables.created_at)
-        )
-    ).all()
+    tables = await ListTables(uow, authorization).execute(database_id)
     return [TableResponseModel.model_validate(table) for table in tables]
 
 
 @router.get("/tables/{table_id}", response_model=TableResponseModel)
-async def get_table(table_id: UUID, authorization: Authorization) -> TableResponseModel:
-    table = await authorization.require_table(table_id)
+async def get_table(
+    table_id: UUID, uow: SchemaUow, authorization: Authorization
+) -> TableResponseModel:
+    table = await GetTable(uow, authorization).execute(table_id)
     return TableResponseModel.model_validate(table)
 
 
@@ -126,17 +191,17 @@ async def get_table(table_id: UUID, authorization: Authorization) -> TableRespon
 async def create_table(
     request: Request,
     body: TableCreateModel,
-    session: DatabaseSession,
+    uow: SchemaUow,
     user: AuthenticatedUser,
     authorization: Authorization,
 ) -> TableResponseModel:
-    await authorization.require_database(body.database_id)
-    values = body.model_dump(exclude={"position", "author_id"})
-    table = Tables(id=uuid4(), author_id=user.account_id, **values)
-    table.position = body.position
-    session.add(table)
-    await commit_or_conflict(session, f"Table '{body.name}' already exists in this database")
-    await session.refresh(table)
+    table = await CreateTable(uow, authorization).execute(
+        CreateTableRequest(
+            database_id=body.database_id,
+            attributes=table_attributes(body),
+            author_id=user.account_id,
+        )
+    )
     request.state.audit_resource_id = str(table.id)
     return TableResponseModel.model_validate(table)
 
@@ -145,45 +210,34 @@ async def create_table(
 async def update_table(
     table_id: UUID,
     body: TableUpdateModel,
-    session: DatabaseSession,
+    uow: SchemaUow,
     authorization: Authorization,
 ) -> TableResponseModel:
-    table = await authorization.require_table(table_id)
-    apply_values(table, body.model_dump(exclude={"position"}))
-    table.position = body.position
-    await commit_or_conflict(session, f"Table '{body.name}' already exists in this database")
-    await session.refresh(table)
+    table = await UpdateTable(uow, authorization).execute(
+        UpdateTableRequest(table_id=table_id, attributes=table_attributes(body))
+    )
     return TableResponseModel.model_validate(table)
 
 
 @router.delete("/tables/{table_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_table(
-    table_id: UUID, session: DatabaseSession, authorization: Authorization
-) -> Response:
-    table = await authorization.require_table(table_id)
-    await session.delete(table)
-    await session.flush()
+async def delete_table(table_id: UUID, uow: SchemaUow, authorization: Authorization) -> Response:
+    await DeleteTable(uow, authorization).execute(table_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/columns/", response_model=list[ColumnResponseModel])
 async def list_columns(
-    table_id: UUID, session: DatabaseSession, authorization: Authorization
+    table_id: UUID, uow: SchemaUow, authorization: Authorization
 ) -> list[ColumnResponseModel]:
-    await authorization.require_table(table_id)
-    columns = (
-        await session.scalars(
-            select(Columns)
-            .where(Columns.table_id == table_id)
-            .order_by(Columns.sort_order, Columns.created_at)
-        )
-    ).all()
+    columns = await ListColumns(uow, authorization).execute(table_id)
     return [ColumnResponseModel.model_validate(column) for column in columns]
 
 
 @router.get("/columns/{column_id}", response_model=ColumnResponseModel)
-async def get_column(column_id: UUID, authorization: Authorization) -> ColumnResponseModel:
-    column = await authorization.require_column(column_id)
+async def get_column(
+    column_id: UUID, uow: SchemaUow, authorization: Authorization
+) -> ColumnResponseModel:
+    column = await GetColumn(uow, authorization).execute(column_id)
     return ColumnResponseModel.model_validate(column)
 
 
@@ -195,19 +249,17 @@ async def get_column(column_id: UUID, authorization: Authorization) -> ColumnRes
 async def create_column(
     request: Request,
     body: ColumnCreateModel,
-    session: DatabaseSession,
+    uow: SchemaUow,
     user: AuthenticatedUser,
     authorization: Authorization,
 ) -> ColumnResponseModel:
-    await authorization.require_table(body.table_id)
-    column = Columns(
-        id=uuid4(),
-        author_id=user.account_id,
-        **body.model_dump(exclude={"author_id"}),
+    column = await CreateColumn(uow, authorization).execute(
+        CreateColumnRequest(
+            table_id=body.table_id,
+            attributes=column_attributes(body),
+            author_id=user.account_id,
+        )
     )
-    session.add(column)
-    await commit_or_conflict(session, f"Column '{body.name}' already exists in this table")
-    await session.refresh(column)
     request.state.audit_resource_id = str(column.id)
     return ColumnResponseModel.model_validate(column)
 
@@ -217,22 +269,17 @@ async def update_column(
     request: Request,
     column_id: UUID,
     body: ColumnUpdateModel,
-    session: DatabaseSession,
+    uow: SchemaUow,
     authorization: Authorization,
 ) -> ColumnResponseModel:
-    column = await authorization.require_column(column_id)
-    apply_values(column, body.model_dump())
-    await commit_or_conflict(session, f"Column '{body.name}' already exists in this table")
-    await session.refresh(column)
+    column = await UpdateColumn(uow, authorization).execute(
+        UpdateColumnRequest(column_id=column_id, attributes=column_attributes(body))
+    )
     request.state.audit_resource_id = str(column.id)
     return ColumnResponseModel.model_validate(column)
 
 
 @router.delete("/columns/{column_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_column(
-    column_id: UUID, session: DatabaseSession, authorization: Authorization
-) -> Response:
-    column = await authorization.require_column(column_id)
-    await session.delete(column)
-    await session.flush()
+async def delete_column(column_id: UUID, uow: SchemaUow, authorization: Authorization) -> Response:
+    await DeleteColumn(uow, authorization).execute(column_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

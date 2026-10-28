@@ -1,84 +1,26 @@
-"""Read an owned ER model and render PostgreSQL DDL without executing it."""
+"""Render PostgreSQL DDL from an ER model without executing it."""
 
 from collections import defaultdict
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from wdl_shared.schemas.engine.enums.database import ColumnType, DataBaseName, IndexType
 
 from common.exceptions.exceptions import SqlExportError
-from context.infrastructure.schemas.database import (
-    Columns,
-    Databases,
-    DiagramIndexColumns,
-    DiagramIndexes,
-    RelationshipColumns,
-    Relationships,
-    Tables,
-)
+from context.domain.entities.column import Column
+from context.domain.entities.database import Database
+from context.domain.entities.index import DiagramIndex, IndexColumn
+from context.domain.entities.relationship import ColumnPair, Relationship
+from context.domain.entities.table import Table
 
 
 @dataclass(frozen=True)
 class SqlDiagram:
-    database: Databases
-    tables: tuple[Tables, ...] = ()
-    columns: tuple[Columns, ...] = ()
-    indexes: tuple[DiagramIndexes, ...] = ()
-    index_columns: tuple[DiagramIndexColumns, ...] = ()
-    relationships: tuple[Relationships, ...] = ()
-    relationship_columns: tuple[RelationshipColumns, ...] = ()
-
-
-async def load_sql_diagram(session: AsyncSession, database: Databases) -> SqlDiagram:
-    """Caller must authorize the database before loading any of its children."""
-    tables = tuple(
-        (await session.scalars(select(Tables).where(Tables.database_id == database.id))).all()
-    )
-    columns = tuple(
-        (
-            await session.scalars(
-                select(Columns).join(Tables).where(Tables.database_id == database.id)
-            )
-        ).all()
-    )
-    indexes = tuple(
-        (
-            await session.scalars(
-                select(DiagramIndexes).join(Tables).where(Tables.database_id == database.id)
-            )
-        ).all()
-    )
-    index_columns = tuple(
-        (
-            await session.scalars(
-                select(DiagramIndexColumns)
-                .join(DiagramIndexes)
-                .join(Tables)
-                .where(Tables.database_id == database.id)
-            )
-        ).all()
-    )
-    relationships = tuple(
-        (
-            await session.scalars(
-                select(Relationships).where(Relationships.database_id == database.id)
-            )
-        ).all()
-    )
-    relationship_columns = tuple(
-        (
-            await session.scalars(
-                select(RelationshipColumns)
-                .join(Relationships)
-                .where(Relationships.database_id == database.id)
-            )
-        ).all()
-    )
-    return SqlDiagram(
-        database, tables, columns, indexes, index_columns, relationships, relationship_columns
-    )
+    database: Database
+    tables: tuple[Table, ...] = ()
+    columns: tuple[Column, ...] = ()
+    indexes: tuple[DiagramIndex, ...] = ()
+    relationships: tuple[Relationship, ...] = ()
 
 
 def identifier(value: str) -> str:
@@ -168,7 +110,7 @@ _ACTIONS = {
 }
 
 
-def column_type(column: Columns, schema: str) -> tuple[str, str | None]:
+def column_type(column: Column, schema: str) -> tuple[str, str | None]:
     location = f"Column {column.name!r}"
     if column.unsigned:
         raise SqlExportError(f"{location}: PostgreSQL does not support unsigned types")
@@ -231,10 +173,10 @@ def generate_postgresql_sql(diagram: SqlDiagram) -> str:
     )
     by_table = {table.id: table for table in tables}
     by_column = {column.id: column for column in diagram.columns}
-    columns: dict[UUID, list[Columns]] = defaultdict(list)
-    indexes: dict[UUID, list[DiagramIndexes]] = defaultdict(list)
-    members: dict[UUID, list[DiagramIndexColumns]] = defaultdict(list)
-    pairs: dict[UUID, list[RelationshipColumns]] = defaultdict(list)
+    columns: dict[UUID, list[Column]] = defaultdict(list)
+    indexes: dict[UUID, list[DiagramIndex]] = defaultdict(list)
+    members: dict[UUID, list[IndexColumn]] = defaultdict(list)
+    pairs: dict[UUID, list[ColumnPair]] = defaultdict(list)
     relation_names: set[tuple[str, str]] = set()
     unique_keys: dict[UUID, set[frozenset[UUID]]] = defaultdict(set)
     primary_keys: dict[UUID, set[UUID]] = defaultdict(set)
@@ -275,10 +217,9 @@ def generate_postgresql_sql(diagram: SqlDiagram) -> str:
         if index.table_id not in by_table:
             raise SqlExportError("Index refers to a table outside the exported database")
         indexes[index.table_id].append(index)
-    for member in diagram.index_columns:
-        members[member.index_id].append(member)
-    for pair in diagram.relationship_columns:
-        pairs[pair.relationship_id].append(pair)
+        members[index.id].extend(index.columns)
+    for relationship in diagram.relationships:
+        pairs[relationship.id].extend(relationship.columns)
 
     for table in tables:
         schema = table.schema_name or default_schema

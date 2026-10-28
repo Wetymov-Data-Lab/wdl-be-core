@@ -2,13 +2,13 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from context.application.services.sql_export import ExportDatabaseSql
 from context.infrastructure.guards.authentication import get_current_user
 from context.infrastructure.guards.authorization import get_authorization_service
+from context.infrastructure.repositories.dependencies import get_realm_uow
+from context.infrastructure.repositories.unit_of_work import SQLAlchemyUnitOfWork
 from context.infrastructure.services.authorization import AuthorizationService
-from context.infrastructure.services.sql_export import generate_postgresql_sql, load_sql_diagram
-from infrastructure.database.dependencies import get_database_session
 
 router = APIRouter(tags=["database schema"], dependencies=[Depends(get_current_user)])
 
@@ -23,12 +23,10 @@ router = APIRouter(tags=["database schema"], dependencies=[Depends(get_current_u
 )
 async def export_database_sql(
     database_id: UUID,
-    session: Annotated[AsyncSession, Depends(get_database_session)],
+    uow: Annotated[SQLAlchemyUnitOfWork, Depends(get_realm_uow)],
     authorization: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> Response:
-    database = await authorization.require_database(database_id)
-    diagram = await load_sql_diagram(session, database)
-    sql = generate_postgresql_sql(diagram)
+    sql = await ExportDatabaseSql(uow, authorization).execute(database_id)
     return Response(
         content=sql,
         media_type="application/sql; charset=utf-8",

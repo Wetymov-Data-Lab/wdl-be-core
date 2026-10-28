@@ -4,15 +4,17 @@ from uuid import UUID, uuid4
 import pytest
 
 from common.exceptions.exceptions import EntityNotFoundError, RealmAlreadyExistsError
-from context.application.commands.realm import (
+from context.application.services.realm import (
     CreateRealm,
     CreateRealmRequest,
     DeleteRealm,
     DeleteRealmRequest,
+    GetRealm,
+    GetRealmRequest,
+    ListRealms,
     UpdateRealm,
     UpdateRealmRequest,
 )
-from context.application.queries.realm import GetRealm, GetRealmRequest, ListRealms
 from context.domain.entities.realm import (
     Realm,
     RealmName,

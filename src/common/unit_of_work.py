@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from types import TracebackType
 
+from common.exceptions.exceptions import EntityAlreadyExistsError
+
 
 class UnitOfWork(ABC):
     """Transaction boundary for an application use case."""
@@ -23,3 +25,11 @@ class UnitOfWork(ABC):
     @abstractmethod
     async def rollback(self) -> None:
         """Roll back all uncommitted changes."""
+
+
+async def commit_or_conflict(uow: UnitOfWork, detail: str) -> None:
+    """Commit and replace a generic uniqueness conflict with a resource-specific message."""
+    try:
+        await uow.commit()
+    except EntityAlreadyExistsError as error:
+        raise EntityAlreadyExistsError(detail) from error

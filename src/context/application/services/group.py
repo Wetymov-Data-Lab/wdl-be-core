@@ -40,6 +40,15 @@ class DeleteGroupRequest:
     deleted_by: UUID
 
 
+class ListGroups(UseCase[UUID, list[DiagramGroup]]):
+    def __init__(self, uow: GroupUnitOfWork) -> None:
+        self._uow = uow
+
+    async def execute(self, request: UUID) -> list[DiagramGroup]:
+        async with self._uow:
+            return await self._uow.groups.list(request)
+
+
 class CreateGroup(UseCase[CreateGroupRequest, DiagramGroup]):
     def __init__(self, uow: GroupUnitOfWork) -> None:
         self._uow = uow

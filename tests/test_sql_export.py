@@ -1,35 +1,90 @@
+import asyncio
 import os
 from dataclasses import replace
+from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 from uuid import UUID, uuid4
 
 import asyncpg
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from wdl_shared.schemas.engine.enums.database import (
+    ColumnType,
+    DataBaseName,
+    IndexType,
+    ReferentialAction,
+    RelationshipCardinality,
+    SortOrder,
+)
+from wdl_shared.schemas.engine.models.canvas import CanvasPosition
 
 from common.exceptions.exceptions import SqlExportError
 from common.services.identity import CurrentUser
+from context.domain.entities.column import Column
+from context.domain.entities.database import Database
+from context.domain.entities.index import DiagramIndex, IndexColumn
+from context.domain.entities.relationship import ColumnPair, Relationship
+from context.domain.entities.table import Table
+from context.domain.services.sql_export import SqlDiagram, generate_postgresql_sql
 from context.infrastructure.guards.authentication import get_current_user
-from context.infrastructure.schemas.database import (
-    Columns,
-    Databases,
-    DiagramIndexColumns,
-    DiagramIndexes,
-    RelationshipColumns,
-    Relationships,
-    Tables,
-)
-from context.infrastructure.services.sql_export import SqlDiagram, generate_postgresql_sql
+from context.infrastructure.repositories.column import ColumnRepository
+from context.infrastructure.repositories.database import DatabaseRepository
+from context.infrastructure.repositories.index import IndexRepository
+from context.infrastructure.repositories.relationship import RelationshipRepository
+from context.infrastructure.repositories.table import TableRepository
+from context.infrastructure.schemas.database import Databases
 from infrastructure.database.dependencies import get_database_session
 from main import create_app
 
+AUTHOR = UUID(int=999)
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
-def column(table_id: UUID, number: int, name: str, **options: object) -> Columns:
-    values: dict[str, object] = dict(
+
+def database(**options: Any) -> Database:
+    values: dict[str, Any] = dict(
+        id=UUID(int=1),
+        project_id=UUID(int=2),
+        name="Test",
+        type=DataBaseName.PSQL,
+        notice=None,
+        default_schema="wdl_export",
+        charset=None,
+        collation=None,
+        author_id=AUTHOR,
+        created_at=NOW,
+    )
+    values.update(options)
+    return Database(**values)
+
+
+def table(number: int, database_id: UUID, name: str, **options: Any) -> Table:
+    values: dict[str, Any] = dict(
+        id=UUID(int=number),
+        database_id=database_id,
+        name=name,
+        schema_name=None,
+        description=None,
+        notice=None,
+        color=None,
+        position=CanvasPosition(x=0, y=0),
+        width=None,
+        is_collapsed=False,
+        sort_order=0,
+        author_id=AUTHOR,
+        created_at=NOW,
+    )
+    values.update(options)
+    return Table(**values)
+
+
+def column(table_id: UUID, number: int, name: str, **options: Any) -> Column:
+    values: dict[str, Any] = dict(
         id=UUID(int=number),
         table_id=table_id,
         name=name,
-        type="integer",
+        type=ColumnType.INTEGER,
         custom_type=None,
         length=None,
         precision=None,
@@ -45,39 +100,67 @@ def column(table_id: UUID, number: int, name: str, **options: object) -> Columns
         enum_values=[],
         sort_order=number,
         notice=None,
+        author_id=AUTHOR,
+        created_at=NOW,
     )
     values.update(options)
-    return Columns(**values)
+    values["type"] = ColumnType(values["type"])
+    return Column(**values)
+
+
+def member(column_id: UUID, position: int, sort_order: str = "asc") -> IndexColumn:
+    return IndexColumn(column_id=column_id, sort_order=SortOrder(sort_order), position=position)
+
+
+def index(number: int, table_id: UUID, name: str | None, **options: Any) -> DiagramIndex:
+    values: dict[str, Any] = dict(
+        id=UUID(int=number),
+        table_id=table_id,
+        name=name,
+        type=IndexType.INDEX,
+        columns=(),
+        method=None,
+        where=None,
+        author_id=AUTHOR,
+        created_at=NOW,
+    )
+    values.update(options)
+    values["type"] = IndexType(values["type"])
+    return DiagramIndex(**values)
+
+
+def relationship(
+    number: int,
+    database_id: UUID,
+    name: str,
+    source: Table,
+    target: Table,
+    pairs: list[tuple[Column, Column]],
+    on_delete: str = "no_action",
+    on_update: str = "no_action",
+) -> Relationship:
+    return Relationship(
+        id=UUID(int=number),
+        database_id=database_id,
+        name=name,
+        source_table_id=source.id,
+        target_table_id=target.id,
+        columns=tuple(ColumnPair(source_column_id=a.id, target_column_id=b.id) for a, b in pairs),
+        source_cardinality=RelationshipCardinality.ZERO_OR_MANY,
+        target_cardinality=RelationshipCardinality.EXACTLY_ONE,
+        on_delete=ReferentialAction(on_delete),
+        on_update=ReferentialAction(on_update),
+        waypoints=(),
+        author_id=AUTHOR,
+        created_at=NOW,
+    )
 
 
 @pytest.fixture
 def diagram() -> SqlDiagram:
-    database = Databases(
-        id=UUID(int=1),
-        name="Test",
-        type="psql",
-        default_schema="wdl_export",
-        charset=None,
-        collation=None,
-    )
-    parent = Tables(
-        id=UUID(int=10),
-        database_id=database.id,
-        name='parent"quoted',
-        schema_name=None,
-        sort_order=0,
-        description="Owner's table",
-        notice=None,
-    )
-    child = Tables(
-        id=UUID(int=20),
-        database_id=database.id,
-        name="child",
-        schema_name=None,
-        sort_order=1,
-        description=None,
-        notice=None,
-    )
+    owner = database()
+    parent = table(10, owner.id, 'parent"quoted', sort_order=0, description="Owner's table")
+    child = table(20, owner.id, "child", sort_order=1)
     parent_id = column(parent.id, 101, "id", primary_key=True, auto_increment=True)
     parent_region = column(parent.id, 102, "region", primary_key=True)
     child_id = column(child.id, 201, "id", primary_key=True)
@@ -103,40 +186,30 @@ def diagram() -> SqlDiagram:
         check='"amount" >= 0',
     )
     tags = column(child.id, 205, "tags", type="varchar", length=40, array_dimensions=2)
-    index = DiagramIndexes(
-        id=UUID(int=30),
-        table_id=child.id,
-        name="child_amount_idx",
-        type="index",
+    amount_index = index(
+        30,
+        child.id,
+        "child_amount_idx",
         method="btree",
         where='"amount" > 0',
+        columns=(member(amount.id, 0, "desc"),),
     )
-    member = DiagramIndexColumns(
-        id=UUID(int=31), index_id=index.id, column_id=amount.id, position=0, sort_order="desc"
-    )
-    fk = Relationships(
-        id=UUID(int=40),
-        database_id=database.id,
-        name="child_parent_fk",
-        source_table_id=child.id,
-        target_table_id=parent.id,
+    fk = relationship(
+        40,
+        owner.id,
+        "child_parent_fk",
+        child,
+        parent,
+        [(child_parent, parent_id), (child_region, parent_region)],
         on_delete="set_null",
         on_update="cascade",
     )
-    mappings = tuple(
-        RelationshipColumns(
-            id=UUID(int=41 + i), relationship_id=fk.id, source_column_id=a.id, target_column_id=b.id
-        )
-        for i, (a, b) in enumerate([(child_parent, parent_id), (child_region, parent_region)])
-    )
     return SqlDiagram(
-        database,
+        owner,
         (child, parent),
         (parent_id, parent_region, status, child_id, child_parent, child_region, amount, tags),
-        (index,),
-        (member,),
+        (amount_index,),
         (fk,),
-        mappings,
     )
 
 
@@ -202,9 +275,7 @@ def test_builtin_types(diagram: SqlDiagram, kind: str, expected: str) -> None:
             diagram,
             columns=(item,),
             indexes=(),
-            index_columns=(),
             relationships=(),
-            relationship_columns=(),
         )
     )
     assert f'"value" {expected}' in sql
@@ -222,7 +293,7 @@ def test_ambiguous_or_external_types_are_rejected(diagram: SqlDiagram, kind: str
     ["mysql", "sqlite", "mongodb", "redis", "maria_db", "oracle", "sql_server", "cockroachdb"],
 )
 def test_other_dialects_do_not_receive_postgresql_sql(diagram: SqlDiagram, engine: str) -> None:
-    diagram.database.type = engine
+    diagram.database.type = DataBaseName(engine)
     with pytest.raises(SqlExportError, match="PostgreSQL"):
         generate_postgresql_sql(diagram)
 
@@ -254,66 +325,28 @@ def test_quoted_expression_literals_can_contain_separators(diagram: SqlDiagram) 
 
 def test_composite_primary_index_is_exported_and_set_null_respects_it(diagram: SqlDiagram) -> None:
     child = diagram.tables[0]
-    pk = DiagramIndexes(
-        id=UUID(int=80), table_id=child.id, name="child_pk", type="primary", method=None, where=None
+    pk = index(
+        80, child.id, "child_pk", type="primary", columns=(member(diagram.columns[3].id, 0),)
     )
-    member = DiagramIndexColumns(
-        id=UUID(int=81),
-        index_id=pk.id,
-        column_id=diagram.columns[3].id,
-        position=0,
-        sort_order="asc",
-    )
-    updated = replace(
-        diagram, indexes=(*diagram.indexes, pk), index_columns=(*diagram.index_columns, member)
-    )
+    updated = replace(diagram, indexes=(*diagram.indexes, pk))
     assert 'CONSTRAINT "child_pk" PRIMARY KEY ("id")' in generate_postgresql_sql(updated)
     diagram.columns[3].primary_key = False
-    member.column_id = diagram.columns[4].id
+    pk.columns = (member(diagram.columns[4].id, 0),)
     with pytest.raises(SqlExportError, match="SET NULL"):
         generate_postgresql_sql(updated)
 
 
 def test_cycles_and_self_references_are_added_after_all_tables(diagram: SqlDiagram) -> None:
     parent, child = diagram.tables[1], diagram.tables[0]
-    self_fk = Relationships(
-        id=UUID(int=60),
-        database_id=diagram.database.id,
-        name="self_fk",
-        source_table_id=child.id,
-        target_table_id=child.id,
-        on_delete="no_action",
-        on_update="no_action",
+    columns = diagram.columns
+    self_fk = relationship(
+        60, diagram.database.id, "self_fk", child, child, [(columns[4], columns[3])]
     )
-    back_fk = Relationships(
-        id=UUID(int=70),
-        database_id=diagram.database.id,
-        name="back_fk",
-        source_table_id=parent.id,
-        target_table_id=child.id,
-        on_delete="no_action",
-        on_update="no_action",
-    )
-    links = (
-        RelationshipColumns(
-            id=UUID(int=61),
-            relationship_id=self_fk.id,
-            source_column_id=diagram.columns[4].id,
-            target_column_id=diagram.columns[3].id,
-        ),
-        RelationshipColumns(
-            id=UUID(int=71),
-            relationship_id=back_fk.id,
-            source_column_id=diagram.columns[0].id,
-            target_column_id=diagram.columns[3].id,
-        ),
+    back_fk = relationship(
+        70, diagram.database.id, "back_fk", parent, child, [(columns[0], columns[3])]
     )
     sql = generate_postgresql_sql(
-        replace(
-            diagram,
-            relationships=(*diagram.relationships, self_fk, back_fk),
-            relationship_columns=(*diagram.relationship_columns, *links),
-        )
+        replace(diagram, relationships=(*diagram.relationships, self_fk, back_fk))
     )
     assert sql.count("ALTER TABLE") == 3
     assert sql.rindex("CREATE TABLE") < sql.index("ALTER TABLE")
@@ -327,7 +360,8 @@ def test_partial_unique_index_cannot_back_a_foreign_key(diagram: SqlDiagram) -> 
 
 
 def test_foreign_key_cannot_export_columns_from_another_model(diagram: SqlDiagram) -> None:
-    diagram.relationship_columns[0].target_column_id = uuid4()
+    fk = diagram.relationships[0]
+    fk.columns = (replace(fk.columns[0], target_column_id=uuid4()), *fk.columns[1:])
     with pytest.raises(SqlExportError, match="endpoint tables"):
         generate_postgresql_sql(diagram)
 
@@ -363,18 +397,7 @@ def test_empty_diagram_is_a_valid_empty_transaction(diagram: SqlDiagram) -> None
 def api(diagram: SqlDiagram):
     app = create_app()
     session = AsyncMock()
-    session.scalar.return_value = diagram.database
-    session.scalars.side_effect = [
-        Mock(all=Mock(return_value=items))
-        for items in (
-            diagram.tables,
-            diagram.columns,
-            diagram.indexes,
-            diagram.index_columns,
-            diagram.relationships,
-            diagram.relationship_columns,
-        )
-    ]
+    mock_session_rows(session, orm_rows(diagram))
 
     async def database_session():
         yield session
@@ -385,6 +408,60 @@ def api(diagram: SqlDiagram):
     )
     yield TestClient(app), session, app
     app.dependency_overrides.clear()
+
+
+async def orm_rows_async(diagram: SqlDiagram) -> dict[str, Any]:
+    session = Mock(spec=AsyncSession)
+    for repository, entities in (
+        (DatabaseRepository, (diagram.database,)),
+        (TableRepository, diagram.tables),
+        (ColumnRepository, diagram.columns),
+        (IndexRepository, diagram.indexes),
+        (RelationshipRepository, diagram.relationships),
+    ):
+        for entity in entities:
+            await repository(session).add(entity)  # type: ignore[arg-type]
+    for entity in diagram.indexes:
+        await IndexRepository(session).add_columns(entity)
+    for entity in diagram.relationships:
+        await RelationshipRepository(session).add_columns(entity)
+    added = [call.args[0] for call in session.add.call_args_list]
+    children = [list(call.args[0]) for call in session.add_all.call_args_list]
+    tables = len(diagram.tables)
+    columns = tables + len(diagram.columns)
+    indexes = columns + len(diagram.indexes)
+    return {
+        "database": added[0],
+        "tables": tuple(added[1 : tables + 1]),
+        "columns": tuple(added[tables + 1 : columns + 1]),
+        "indexes": tuple(added[columns + 1 : indexes + 1]),
+        "relationships": tuple(added[indexes + 1 :]),
+        "index_columns": tuple(row for rows in children[: len(diagram.indexes)] for row in rows),
+        "relationship_columns": tuple(
+            row for rows in children[len(diagram.indexes) :] for row in rows
+        ),
+    }
+
+
+def orm_rows(diagram: SqlDiagram) -> dict[str, Any]:
+    """Store the domain model through the real repository mapping, as the database would."""
+    return asyncio.run(orm_rows_async(diagram))
+
+
+def mock_session_rows(session: AsyncMock, rows: dict[str, Any]) -> None:
+    session.scalar.return_value = rows["database"]
+    session.get.return_value = rows["database"]
+    session.scalars.side_effect = [
+        Mock(all=Mock(return_value=rows[key]))
+        for key in (
+            "tables",
+            "columns",
+            "indexes",
+            "index_columns",
+            "relationships",
+            "relationship_columns",
+        )
+    ]
 
 
 def test_api_returns_sql_attachment_and_scopes_all_queries(api, diagram: SqlDiagram) -> None:
@@ -400,6 +477,8 @@ def test_api_returns_sql_attachment_and_scopes_all_queries(api, diagram: SqlDiag
     assert response.text == generate_postgresql_sql(diagram)
     ownership = session.scalar.await_args.args[0].compile()
     assert UUID(int=500) in ownership.params.values()
+    session.get.assert_awaited_once_with(Databases, diagram.database.id)
+    assert session.scalars.await_count == 6
     for call in session.scalars.await_args_list:
         assert diagram.database.id in call.args[0].compile().params.values()
     session.execute.assert_not_awaited()
@@ -425,8 +504,8 @@ def test_export_hides_inaccessible_database_before_loading_children(
 
 
 def test_api_reports_unsupported_dialect_without_partial_file(api, diagram: SqlDiagram) -> None:
-    client, _, _ = api
-    diagram.database.type = "mysql"
+    client, session, _ = api
+    session.get.return_value.type = "mysql"
     response = client.get(f"/databases/{diagram.database.id}/export/sql")
     assert response.status_code == 422
     assert "PostgreSQL" in response.json()["detail"]
@@ -484,21 +563,15 @@ def test_identical_enums_share_a_type_even_across_schemas(diagram: SqlDiagram) -
     "option", ["fulltext", "invalid_method", "duplicate_position", "cross_table"]
 )
 def test_invalid_indexes_return_diagnostics(diagram: SqlDiagram, option: str) -> None:
+    amount_index = diagram.indexes[0]
     if option == "fulltext":
-        diagram.indexes[0].type = "fulltext"
+        amount_index.type = IndexType.FULLTEXT
     elif option == "invalid_method":
-        diagram.indexes[0].method = "btree); DROP SCHEMA public"
+        amount_index.method = "btree); DROP SCHEMA public"
     elif option == "duplicate_position":
-        member = DiagramIndexColumns(
-            id=uuid4(),
-            index_id=diagram.indexes[0].id,
-            column_id=diagram.columns[3].id,
-            position=0,
-            sort_order="asc",
-        )
-        diagram = replace(diagram, index_columns=(*diagram.index_columns, member))
+        amount_index.columns = (*amount_index.columns, member(diagram.columns[3].id, 0))
     else:
-        diagram.index_columns[0].column_id = diagram.columns[0].id
+        amount_index.columns = (replace(amount_index.columns[0], column_id=diagram.columns[0].id),)
     with pytest.raises(SqlExportError, match="Index"):
         generate_postgresql_sql(diagram)
 
@@ -506,37 +579,19 @@ def test_invalid_indexes_return_diagnostics(diagram: SqlDiagram, option: str) ->
 def test_composite_unique_index_can_back_a_foreign_key(diagram: SqlDiagram) -> None:
     for item in diagram.columns[:2]:
         item.primary_key = False
-    index = DiagramIndexes(
-        id=UUID(int=80),
-        table_id=diagram.tables[1].id,
-        name="parent_unique",
+    unique = index(
+        80,
+        diagram.tables[1].id,
+        "parent_unique",
         type="unique",
         method="btree",
-        where=None,
+        columns=tuple(member(c.id, i) for i, c in enumerate(diagram.columns[:2])),
     )
-    members = tuple(
-        DiagramIndexColumns(
-            id=UUID(int=81 + i), index_id=index.id, column_id=c.id, position=i, sort_order="asc"
-        )
-        for i, c in enumerate(diagram.columns[:2])
-    )
-    sql = generate_postgresql_sql(
-        replace(
-            diagram,
-            indexes=(*diagram.indexes, index),
-            index_columns=(*diagram.index_columns, *members),
-        )
-    )
-    assert 'CREATE UNIQUE INDEX "parent_unique"' in sql
-    index.where = '"id" > 0'
+    updated = replace(diagram, indexes=(*diagram.indexes, unique))
+    assert 'CREATE UNIQUE INDEX "parent_unique"' in generate_postgresql_sql(updated)
+    unique.where = '"id" > 0'
     with pytest.raises(SqlExportError, match="nonpartial unique key"):
-        generate_postgresql_sql(
-            replace(
-                diagram,
-                indexes=(*diagram.indexes, index),
-                index_columns=(*diagram.index_columns, *members),
-            )
-        )
+        generate_postgresql_sql(updated)
 
 
 async def test_cyclic_sql_executes_on_isolated_postgresql(diagram: SqlDiagram) -> None:
@@ -544,26 +599,15 @@ async def test_cyclic_sql_executes_on_isolated_postgresql(diagram: SqlDiagram) -
     if not dsn:
         pytest.skip("Set WDL_SQL_EXPORT_TEST_DSN to an isolated disposable PostgreSQL database")
     parent, child = diagram.tables[1], diagram.tables[0]
-    fk = Relationships(
-        id=UUID(int=60),
-        database_id=diagram.database.id,
-        name="back_reference",
-        source_table_id=parent.id,
-        target_table_id=child.id,
-        on_delete="no_action",
-        on_update="no_action",
+    fk = relationship(
+        60,
+        diagram.database.id,
+        "back_reference",
+        parent,
+        child,
+        [(diagram.columns[0], diagram.columns[3])],
     )
-    mapping = RelationshipColumns(
-        id=UUID(int=61),
-        relationship_id=fk.id,
-        source_column_id=diagram.columns[0].id,
-        target_column_id=diagram.columns[3].id,
-    )
-    diagram = replace(
-        diagram,
-        relationships=(*diagram.relationships, fk),
-        relationship_columns=(*diagram.relationship_columns, mapping),
-    )
+    diagram = replace(diagram, relationships=(*diagram.relationships, fk))
     connection = await asyncpg.connect(dsn)
     try:
         await connection.execute(generate_postgresql_sql(diagram))
@@ -581,25 +625,10 @@ async def test_cyclic_sql_executes_on_isolated_postgresql(diagram: SqlDiagram) -
 
 @pytest.fixture
 def minimal_client_diagram() -> SqlDiagram:
-    database = Databases(
-        id=UUID(int=1),
-        name="Simple",
-        type="psql",
-        default_schema="public",
-        charset="UTF8",
-        collation=None,
-    )
-    table = Tables(
-        id=UUID(int=10),
-        database_id=database.id,
-        name="items",
-        schema_name=None,
-        sort_order=0,
-        description=None,
-        notice=None,
-    )
-    field = column(table.id, 101, "name", type="varchar")
-    return SqlDiagram(database, (table,), (field,))
+    owner = database(name="Simple", default_schema="public", charset="UTF8")
+    items = table(10, owner.id, "items")
+    field = column(items.id, 101, "name", type="varchar")
+    return SqlDiagram(owner, (items,), (field,))
 
 
 @pytest.mark.parametrize("charset", ["UTF8", "utf8", "UTF-8"])
@@ -621,11 +650,7 @@ def test_non_utf8_charset_is_not_silently_dropped(minimal_client_diagram: SqlDia
 
 def test_api_exports_minimal_client_model(api, minimal_client_diagram: SqlDiagram) -> None:
     client, session, _ = api
-    session.scalar.return_value = minimal_client_diagram.database
-    session.scalars.side_effect = [
-        Mock(all=Mock(return_value=items))
-        for items in (minimal_client_diagram.tables, minimal_client_diagram.columns, (), (), (), ())
-    ]
+    mock_session_rows(session, orm_rows(minimal_client_diagram))
     response = client.get(f"/databases/{minimal_client_diagram.database.id}/export/sql")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/sql; charset=utf-8"
