@@ -1,4 +1,4 @@
-.PHONY: env install dev lint format typecheck test check migrate migration up down stop build logs
+.PHONY: env install dev lint format typecheck test check migrate migration seed-demo up down stop build logs
 
 env:
 	[ -f .env.example ] && cp -f .env.example .env || echo '.env.example not found'
@@ -28,6 +28,9 @@ migrate:
 
 migration:
 	uv run alembic revision --autogenerate -m "$(name)"
+
+seed-demo:
+	uv run python -m context.infrastructure.seeders.demo --account-id "$(account)"
 
 up:
 	docker compose up -d

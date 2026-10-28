@@ -45,6 +45,7 @@ API в Docker будет доступно по адресу `http://localhost:80
 | `make check`                    | Запустить все проверки                          | Последовательно запускает цели `lint`, `typecheck` и `test`         |
 | `make migrate`                  | Применить все неприменённые миграции Alembic    | `uv run alembic upgrade head`                                       |
 | `make migration name="message"` | Создать автогенерируемую миграцию Alembic        | `uv run alembic revision --autogenerate -m "$(name)"`               |
+| `make seed-demo account="uuid"` | Создать демо-проект с базами для тестирования   | `uv run python -m context.infrastructure.seeders.demo --account-id "$(account)"` |
 | `make up`                       | Запустить сервисы Docker Compose в фоне         | `docker compose up -d`                                              |
 | `make build`                    | Собрать образы сервисов Docker Compose          | `docker compose build`                                              |
 | `make logs`                     | Показывать логи сервисов в реальном времени     | `docker compose logs -f`                                            |
