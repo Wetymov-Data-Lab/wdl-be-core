@@ -234,6 +234,7 @@ def add_table(uow: FakeUnitOfWork, database_id: UUID, name: str) -> Table:
             width=None,
             is_collapsed=False,
             sort_order=0,
+            checks=(),
         ),
         author_id=uuid4(),
         created_at=NOW,

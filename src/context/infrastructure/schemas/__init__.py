@@ -8,6 +8,7 @@ from .database import (
     Relationships,
     Tables,
 )
+from .history import DiagramHistoryEntries
 from .project import Projects
 from .realm import RealmSchema
 
@@ -17,6 +18,7 @@ __all__ = [
     "Databases",
     "DiagramGroups",
     "DiagramGroupTables",
+    "DiagramHistoryEntries",
     "DiagramIndexColumns",
     "DiagramIndexes",
     "DiagramNotes",

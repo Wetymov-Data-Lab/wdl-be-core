@@ -1,10 +1,11 @@
 import builtins
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from context.domain.entities.table import Table
+from context.domain.entities.table import Table, TableCheck
 from context.infrastructure.repositories.table_contract import (
     TableRepository as AbstractTableRepository,
 )
@@ -41,6 +42,7 @@ class TableRepository(AbstractTableRepository):
             width=entity.width,
             is_collapsed=entity.is_collapsed,
             sort_order=entity.sort_order,
+            checks=checks_to_json(entity.checks),
             author_id=entity.author_id,
             created_at=entity.created_at,
             updated_at=entity.updated_at,
@@ -59,6 +61,7 @@ class TableRepository(AbstractTableRepository):
         model.width = table.width
         model.is_collapsed = table.is_collapsed
         model.sort_order = table.sort_order
+        model.checks = checks_to_json(table.checks)
         model.updated_at = table.updated_at
 
     async def remove(self, entity: Table) -> None:
@@ -78,7 +81,15 @@ class TableRepository(AbstractTableRepository):
             width=model.width,
             is_collapsed=model.is_collapsed,
             sort_order=model.sort_order,
+            checks=tuple(
+                TableCheck(name=check["name"], expression=check["expression"])
+                for check in model.checks
+            ),
             author_id=model.author_id,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
+
+
+def checks_to_json(checks: tuple[TableCheck, ...]) -> list[dict[str, Any]]:
+    return [{"name": check.name, "expression": check.expression} for check in checks]

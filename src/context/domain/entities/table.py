@@ -8,6 +8,14 @@ from context.domain.entities.base import Entity
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class TableCheck:
+    """Table-level CHECK constraint."""
+
+    name: str | None
+    expression: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TableAttributes:
     """Mutable attributes of a database table and its canvas card."""
 
@@ -20,6 +28,7 @@ class TableAttributes:
     width: float | None
     is_collapsed: bool
     sort_order: int
+    checks: tuple[TableCheck, ...]
 
 
 @dataclass(eq=False, kw_only=True)
@@ -34,6 +43,7 @@ class Table(Entity[UUID]):
     width: float | None
     is_collapsed: bool
     sort_order: int
+    checks: tuple[TableCheck, ...]
     author_id: UUID
     created_at: datetime
     updated_at: datetime | None = None
@@ -60,6 +70,7 @@ class Table(Entity[UUID]):
             width=attributes.width,
             is_collapsed=attributes.is_collapsed,
             sort_order=attributes.sort_order,
+            checks=attributes.checks,
             author_id=author_id,
             created_at=created_at,
         )

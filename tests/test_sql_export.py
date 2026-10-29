@@ -26,7 +26,7 @@ from context.domain.entities.column import Column
 from context.domain.entities.database import Database
 from context.domain.entities.index import DiagramIndex, IndexColumn
 from context.domain.entities.relationship import ColumnPair, Relationship
-from context.domain.entities.table import Table
+from context.domain.entities.table import Table, TableCheck
 from context.domain.services.sql_export import SqlDiagram, generate_postgresql_sql
 from context.infrastructure.guards.authentication import get_current_user
 from context.infrastructure.repositories.column import ColumnRepository
@@ -72,6 +72,7 @@ def table(number: int, database_id: UUID, name: str, **options: Any) -> Table:
         width=None,
         is_collapsed=False,
         sort_order=0,
+        checks=(),
         author_id=AUTHOR,
         created_at=NOW,
     )
@@ -321,6 +322,20 @@ def test_statement_injection_and_invalid_expressions_are_rejected(
 def test_quoted_expression_literals_can_contain_separators(diagram: SqlDiagram) -> None:
     diagram.columns[2].default = "'x;--y'"
     assert "DEFAULT 'x;--y'" in generate_postgresql_sql(diagram)
+
+
+def test_table_checks_are_exported_as_named_constraints(diagram: SqlDiagram) -> None:
+    child = diagram.tables[0]
+    child.checks = (
+        TableCheck(name="child_range", expression="id > 0 AND id < 1000"),
+        TableCheck(name=None, expression="id <> 5"),
+    )
+    sql = generate_postgresql_sql(diagram)
+    assert 'CONSTRAINT "child_range" CHECK (id > 0 AND id < 1000)' in sql
+    assert f'CONSTRAINT "wdl_ck_{child.id.hex}_1" CHECK (id <> 5)' in sql
+    child.checks = (TableCheck(name=None, expression="0; DROP TABLE users"),)
+    with pytest.raises(SqlExportError, match="expression"):
+        generate_postgresql_sql(diagram)
 
 
 def test_composite_primary_index_is_exported_and_set_null_respects_it(diagram: SqlDiagram) -> None:

@@ -15,6 +15,7 @@ EXPECTED_TABLES = {
     "databases",
     "diagram_group_tables",
     "diagram_groups",
+    "diagram_history",
     "diagram_index_columns",
     "diagram_indexes",
     "diagram_notes",
@@ -71,6 +72,7 @@ def test_table_response_reads_persisted_canvas_position() -> None:
         position_y=-40,
         is_collapsed=False,
         sort_order=0,
+        checks=[],
         author_id=uuid4(),
         created_at=datetime.now(UTC),
     )

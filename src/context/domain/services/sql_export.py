@@ -337,6 +337,13 @@ def generate_postgresql_sql(diagram: SqlDiagram) -> str:
             elif index.type == IndexType.UNIQUE:
                 unique_keys[table.id].add(frozenset(ids))
             create_indexes.append(sql + ";")
+        for position, check in enumerate(table.checks):
+            check_name = check.name or f"wdl_ck_{table.id.hex}_{position}"
+            definitions.append(
+                f"CONSTRAINT {constraint(table.id, check_name)} CHECK ("
+                + expression(check.expression, f"{table.name}.{check_name} check")
+                + ")"
+            )
         if primary:
             if any(i not in by_column or by_column[i].table_id != table.id for i in primary):
                 raise SqlExportError(f"Table {table.name!r}: invalid primary key columns")

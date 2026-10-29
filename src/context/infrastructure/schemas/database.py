@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
@@ -100,6 +101,11 @@ class Tables(AuditMixin, CanvasPositionMixin, Base):
     width:      Mapped[float | None] = mapped_column(Float, nullable=True)
     is_collapsed: Mapped[bool]       = mapped_column(Boolean, nullable=False, default=False)
     sort_order:   Mapped[int]        = mapped_column(Integer, nullable=False, default=0)
+    checks:       Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
 
 
 class Columns(AuditMixin, Base):

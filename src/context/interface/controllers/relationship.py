@@ -40,14 +40,19 @@ from context.domain.entities.relationship import (
 )
 from context.infrastructure.guards.authentication import get_current_user
 from context.infrastructure.guards.authorization import get_authorization_service
-from context.infrastructure.repositories.dependencies import get_realm_uow
+from context.infrastructure.repositories.dependencies import (
+    get_diagram_history,
+    get_realm_uow,
+)
 from context.infrastructure.repositories.unit_of_work import SQLAlchemyUnitOfWork
 from context.infrastructure.services.authorization import AuthorizationService
+from context.infrastructure.services.diagram_history import DiagramHistory
 
 router = APIRouter(tags=["database relationships"], dependencies=[Depends(get_current_user)])
 SchemaUow = Annotated[SQLAlchemyUnitOfWork, Depends(get_realm_uow)]
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 Authorization = Annotated[AuthorizationService, Depends(get_authorization_service)]
+History = Annotated[DiagramHistory, Depends(get_diagram_history)]
 
 
 def index_attributes(body: IndexCreateModel | IndexUpdateModel) -> IndexAttributes:
@@ -156,14 +161,17 @@ async def create_index(
     uow: SchemaUow,
     user: AuthenticatedUser,
     authorization: Authorization,
+    history: History,
 ) -> IndexResponseModel:
-    index = await CreateIndex(uow, authorization).execute(
-        CreateIndexRequest(
-            table_id=body.table_id,
-            attributes=index_attributes(body),
-            author_id=user.account_id,
+    database_id = await history.database_of_table(body.table_id)
+    async with history.record(database_id, user.account_id, "index.create"):
+        index = await CreateIndex(uow, authorization).execute(
+            CreateIndexRequest(
+                table_id=body.table_id,
+                attributes=index_attributes(body),
+                author_id=user.account_id,
+            )
         )
-    )
     request.state.audit_resource_id = str(index.id)
     return index_response(index)
 
@@ -174,16 +182,28 @@ async def update_index(
     body: IndexUpdateModel,
     uow: SchemaUow,
     authorization: Authorization,
+    user: AuthenticatedUser,
+    history: History,
 ) -> IndexResponseModel:
-    index = await UpdateIndex(uow, authorization).execute(
-        UpdateIndexRequest(index_id=index_id, attributes=index_attributes(body))
-    )
+    database_id = await history.database_of_index(index_id)
+    async with history.record(database_id, user.account_id, "index.update"):
+        index = await UpdateIndex(uow, authorization).execute(
+            UpdateIndexRequest(index_id=index_id, attributes=index_attributes(body))
+        )
     return index_response(index)
 
 
 @router.delete("/indexes/{index_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_index(index_id: UUID, uow: SchemaUow, authorization: Authorization) -> Response:
-    await DeleteIndex(uow, authorization).execute(index_id)
+async def delete_index(
+    index_id: UUID,
+    uow: SchemaUow,
+    authorization: Authorization,
+    user: AuthenticatedUser,
+    history: History,
+) -> Response:
+    database_id = await history.database_of_index(index_id)
+    async with history.record(database_id, user.account_id, "index.delete"):
+        await DeleteIndex(uow, authorization).execute(index_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -218,16 +238,18 @@ async def create_relationship(
     uow: SchemaUow,
     user: AuthenticatedUser,
     authorization: Authorization,
+    history: History,
 ) -> RelationshipResponseModel:
-    relationship = await CreateRelationship(uow, authorization).execute(
-        CreateRelationshipRequest(
-            database_id=body.database_id,
-            source_table_id=body.source_table_id,
-            target_table_id=body.target_table_id,
-            attributes=relationship_attributes(body),
-            author_id=user.account_id,
+    async with history.record(body.database_id, user.account_id, "relationship.create"):
+        relationship = await CreateRelationship(uow, authorization).execute(
+            CreateRelationshipRequest(
+                database_id=body.database_id,
+                source_table_id=body.source_table_id,
+                target_table_id=body.target_table_id,
+                attributes=relationship_attributes(body),
+                author_id=user.account_id,
+            )
         )
-    )
     request.state.audit_resource_id = str(relationship.id)
     return relationship_response(relationship)
 
@@ -241,13 +263,17 @@ async def update_relationship(
     body: RelationshipUpdateModel,
     uow: SchemaUow,
     authorization: Authorization,
+    user: AuthenticatedUser,
+    history: History,
 ) -> RelationshipResponseModel:
-    relationship = await UpdateRelationship(uow, authorization).execute(
-        UpdateRelationshipRequest(
-            relationship_id=relationship_id,
-            attributes=relationship_attributes(body),
+    database_id = await history.database_of_relationship(relationship_id)
+    async with history.record(database_id, user.account_id, "relationship.update"):
+        relationship = await UpdateRelationship(uow, authorization).execute(
+            UpdateRelationshipRequest(
+                relationship_id=relationship_id,
+                attributes=relationship_attributes(body),
+            )
         )
-    )
     return relationship_response(relationship)
 
 
@@ -259,6 +285,10 @@ async def delete_relationship(
     relationship_id: UUID,
     uow: SchemaUow,
     authorization: Authorization,
+    user: AuthenticatedUser,
+    history: History,
 ) -> Response:
-    await DeleteRelationship(uow, authorization).execute(relationship_id)
+    database_id = await history.database_of_relationship(relationship_id)
+    async with history.record(database_id, user.account_id, "relationship.delete"):
+        await DeleteRelationship(uow, authorization).execute(relationship_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

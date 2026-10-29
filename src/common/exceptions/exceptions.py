@@ -28,3 +28,7 @@ class AuthorizationError(Exception):
 
 class SqlExportError(DomainError):
     """The ER model cannot be represented by the supported SQL dialect."""
+
+
+class HistoryConflictError(DomainError):
+    """An undo/redo step is missing or no longer matches the current diagram."""

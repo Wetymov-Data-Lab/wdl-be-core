@@ -203,6 +203,7 @@ def table_attributes(name: str = "users") -> TableAttributes:
         width=240,
         is_collapsed=False,
         sort_order=0,
+        checks=(),
     )
 
 

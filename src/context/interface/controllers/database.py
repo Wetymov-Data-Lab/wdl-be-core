@@ -45,17 +45,22 @@ from context.application.services.table import (
 )
 from context.domain.entities.column import ColumnAttributes
 from context.domain.entities.database import DatabaseAttributes
-from context.domain.entities.table import TableAttributes
+from context.domain.entities.table import TableAttributes, TableCheck
 from context.infrastructure.guards.authentication import get_current_user
 from context.infrastructure.guards.authorization import get_authorization_service
-from context.infrastructure.repositories.dependencies import get_realm_uow
+from context.infrastructure.repositories.dependencies import (
+    get_diagram_history,
+    get_realm_uow,
+)
 from context.infrastructure.repositories.unit_of_work import SQLAlchemyUnitOfWork
 from context.infrastructure.services.authorization import AuthorizationService
+from context.infrastructure.services.diagram_history import DiagramHistory
 
 router = APIRouter(tags=["database schema"], dependencies=[Depends(get_current_user)])
 SchemaUow = Annotated[SQLAlchemyUnitOfWork, Depends(get_realm_uow)]
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 Authorization = Annotated[AuthorizationService, Depends(get_authorization_service)]
+History = Annotated[DiagramHistory, Depends(get_diagram_history)]
 
 
 def database_attributes(body: DatabaseCreateModel | DatabaseUpdateModel) -> DatabaseAttributes:
@@ -80,6 +85,9 @@ def table_attributes(body: TableCreateModel | TableUpdateModel) -> TableAttribut
         width=body.width,
         is_collapsed=body.is_collapsed,
         sort_order=body.sort_order,
+        checks=tuple(
+            TableCheck(name=check.name, expression=check.expression) for check in body.checks
+        ),
     )
 
 
@@ -194,14 +202,16 @@ async def create_table(
     uow: SchemaUow,
     user: AuthenticatedUser,
     authorization: Authorization,
+    history: History,
 ) -> TableResponseModel:
-    table = await CreateTable(uow, authorization).execute(
-        CreateTableRequest(
-            database_id=body.database_id,
-            attributes=table_attributes(body),
-            author_id=user.account_id,
+    async with history.record(body.database_id, user.account_id, "table.create"):
+        table = await CreateTable(uow, authorization).execute(
+            CreateTableRequest(
+                database_id=body.database_id,
+                attributes=table_attributes(body),
+                author_id=user.account_id,
+            )
         )
-    )
     request.state.audit_resource_id = str(table.id)
     return TableResponseModel.model_validate(table)
 
@@ -212,16 +222,28 @@ async def update_table(
     body: TableUpdateModel,
     uow: SchemaUow,
     authorization: Authorization,
+    user: AuthenticatedUser,
+    history: History,
 ) -> TableResponseModel:
-    table = await UpdateTable(uow, authorization).execute(
-        UpdateTableRequest(table_id=table_id, attributes=table_attributes(body))
-    )
+    database_id = await history.database_of_table(table_id)
+    async with history.record(database_id, user.account_id, "table.update"):
+        table = await UpdateTable(uow, authorization).execute(
+            UpdateTableRequest(table_id=table_id, attributes=table_attributes(body))
+        )
     return TableResponseModel.model_validate(table)
 
 
 @router.delete("/tables/{table_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_table(table_id: UUID, uow: SchemaUow, authorization: Authorization) -> Response:
-    await DeleteTable(uow, authorization).execute(table_id)
+async def delete_table(
+    table_id: UUID,
+    uow: SchemaUow,
+    authorization: Authorization,
+    user: AuthenticatedUser,
+    history: History,
+) -> Response:
+    database_id = await history.database_of_table(table_id)
+    async with history.record(database_id, user.account_id, "table.delete"):
+        await DeleteTable(uow, authorization).execute(table_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -252,14 +274,17 @@ async def create_column(
     uow: SchemaUow,
     user: AuthenticatedUser,
     authorization: Authorization,
+    history: History,
 ) -> ColumnResponseModel:
-    column = await CreateColumn(uow, authorization).execute(
-        CreateColumnRequest(
-            table_id=body.table_id,
-            attributes=column_attributes(body),
-            author_id=user.account_id,
+    database_id = await history.database_of_table(body.table_id)
+    async with history.record(database_id, user.account_id, "column.create"):
+        column = await CreateColumn(uow, authorization).execute(
+            CreateColumnRequest(
+                table_id=body.table_id,
+                attributes=column_attributes(body),
+                author_id=user.account_id,
+            )
         )
-    )
     request.state.audit_resource_id = str(column.id)
     return ColumnResponseModel.model_validate(column)
 
@@ -271,15 +296,27 @@ async def update_column(
     body: ColumnUpdateModel,
     uow: SchemaUow,
     authorization: Authorization,
+    user: AuthenticatedUser,
+    history: History,
 ) -> ColumnResponseModel:
-    column = await UpdateColumn(uow, authorization).execute(
-        UpdateColumnRequest(column_id=column_id, attributes=column_attributes(body))
-    )
+    database_id = await history.database_of_column(column_id)
+    async with history.record(database_id, user.account_id, "column.update"):
+        column = await UpdateColumn(uow, authorization).execute(
+            UpdateColumnRequest(column_id=column_id, attributes=column_attributes(body))
+        )
     request.state.audit_resource_id = str(column.id)
     return ColumnResponseModel.model_validate(column)
 
 
 @router.delete("/columns/{column_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_column(column_id: UUID, uow: SchemaUow, authorization: Authorization) -> Response:
-    await DeleteColumn(uow, authorization).execute(column_id)
+async def delete_column(
+    column_id: UUID,
+    uow: SchemaUow,
+    authorization: Authorization,
+    user: AuthenticatedUser,
+    history: History,
+) -> Response:
+    database_id = await history.database_of_column(column_id)
+    async with history.record(database_id, user.account_id, "column.delete"):
+        await DeleteColumn(uow, authorization).execute(column_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -335,6 +335,7 @@ class DemoSeeder:
                     width=box.width,
                     is_collapsed=False,
                     sort_order=order,
+                    checks=(),
                 ),
                 author_id=self._account_id,
             )

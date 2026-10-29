@@ -7,6 +7,7 @@ from common.exceptions.exceptions import (
     DomainError,
     EntityAlreadyExistsError,
     EntityNotFoundError,
+    HistoryConflictError,
     InvalidRealmNameError,
     RealmAlreadyExistsError,
     SqlExportError,
@@ -32,6 +33,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RealmAlreadyExistsError)
     @app.exception_handler(EntityAlreadyExistsError)
+    @app.exception_handler(HistoryConflictError)
     async def conflict(_: Request, error: RealmAlreadyExistsError) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(error)})
 

@@ -39,14 +39,19 @@ from context.domain.entities.group import DiagramGroup
 from context.domain.entities.note import DiagramNote, NoteAttributes
 from context.infrastructure.guards.authentication import get_current_user
 from context.infrastructure.guards.authorization import get_authorization_service
-from context.infrastructure.repositories.dependencies import get_realm_uow
+from context.infrastructure.repositories.dependencies import (
+    get_diagram_history,
+    get_realm_uow,
+)
 from context.infrastructure.repositories.unit_of_work import SQLAlchemyUnitOfWork
 from context.infrastructure.services.authorization import AuthorizationService
+from context.infrastructure.services.diagram_history import DiagramHistory
 
 router = APIRouter(prefix="/canvas", tags=["canvas"], dependencies=[Depends(get_current_user)])
 CanvasUow = Annotated[SQLAlchemyUnitOfWork, Depends(get_realm_uow)]
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 Authorization = Annotated[AuthorizationService, Depends(get_authorization_service)]
+History = Annotated[DiagramHistory, Depends(get_diagram_history)]
 
 
 def canvas_response(state: CanvasState) -> CanvasStateModel:
@@ -159,25 +164,27 @@ async def create_group(
     uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
+    history: History,
 ) -> DiagramGroupModel:
     if body.database_id != database_id:
         raise DomainError("Path database_id must match body database_id")
     await authorization.require_database(database_id)
-    group = await CreateGroup(uow).execute(
-        CreateGroupRequest(
-            database_id=database_id,
-            group_id=body.id,
-            name=body.name,
-            x=body.position.x,
-            y=body.position.y,
-            width=body.width,
-            height=body.height,
-            color=body.color,
-            is_collapsed=body.is_collapsed,
-            table_ids=body.table_ids,
-            author_id=user.account_id,
+    async with history.record(database_id, user.account_id, "group.create"):
+        group = await CreateGroup(uow).execute(
+            CreateGroupRequest(
+                database_id=database_id,
+                group_id=body.id,
+                name=body.name,
+                x=body.position.x,
+                y=body.position.y,
+                width=body.width,
+                height=body.height,
+                color=body.color,
+                is_collapsed=body.is_collapsed,
+                table_ids=body.table_ids,
+                author_id=user.account_id,
+            )
         )
-    )
     request.state.audit_resource_id = str(group.id)
     return group_response(group)
 
@@ -190,25 +197,27 @@ async def update_group(
     uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
+    history: History,
 ) -> DiagramGroupModel:
     if body.id != group_id or body.database_id != database_id:
         raise DomainError("Path identifiers must match body identifiers")
     await authorization.require_database(database_id)
-    group = await UpdateGroup(uow).execute(
-        UpdateGroupRequest(
-            database_id=database_id,
-            group_id=group_id,
-            name=body.name,
-            x=body.position.x,
-            y=body.position.y,
-            width=body.width,
-            height=body.height,
-            color=body.color,
-            is_collapsed=body.is_collapsed,
-            table_ids=body.table_ids,
-            updated_by=user.account_id,
+    async with history.record(database_id, user.account_id, "group.update"):
+        group = await UpdateGroup(uow).execute(
+            UpdateGroupRequest(
+                database_id=database_id,
+                group_id=group_id,
+                name=body.name,
+                x=body.position.x,
+                y=body.position.y,
+                width=body.width,
+                height=body.height,
+                color=body.color,
+                is_collapsed=body.is_collapsed,
+                table_ids=body.table_ids,
+                updated_by=user.account_id,
+            )
         )
-    )
     return group_response(group)
 
 
@@ -222,15 +231,17 @@ async def delete_group(
     uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
+    history: History,
 ) -> Response:
     await authorization.require_database(database_id)
-    await DeleteGroup(uow).execute(
-        DeleteGroupRequest(
-            database_id=database_id,
-            group_id=group_id,
-            deleted_by=user.account_id,
+    async with history.record(database_id, user.account_id, "group.delete"):
+        await DeleteGroup(uow).execute(
+            DeleteGroupRequest(
+                database_id=database_id,
+                group_id=group_id,
+                deleted_by=user.account_id,
+            )
         )
-    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -256,17 +267,19 @@ async def create_note(
     uow: CanvasUow,
     user: AuthenticatedUser,
     authorization: Authorization,
+    history: History,
 ) -> DiagramNoteModel:
     if body.database_id != database_id:
         raise DomainError("Path database_id must match body database_id")
-    note = await CreateNote(uow, authorization).execute(
-        CreateNoteRequest(
-            database_id=database_id,
-            note_id=body.id,
-            attributes=note_attributes(body),
-            author_id=user.account_id,
+    async with history.record(database_id, user.account_id, "note.create"):
+        note = await CreateNote(uow, authorization).execute(
+            CreateNoteRequest(
+                database_id=database_id,
+                note_id=body.id,
+                attributes=note_attributes(body),
+                author_id=user.account_id,
+            )
         )
-    )
     request.state.audit_resource_id = str(note.id)
     return note_response(note)
 
@@ -278,16 +291,19 @@ async def update_note(
     body: DiagramNoteModel,
     uow: CanvasUow,
     authorization: Authorization,
+    user: AuthenticatedUser,
+    history: History,
 ) -> DiagramNoteModel:
     if body.id != note_id or body.database_id != database_id:
         raise DomainError("Path identifiers must match body identifiers")
-    note = await UpdateNote(uow, authorization).execute(
-        UpdateNoteRequest(
-            database_id=database_id,
-            note_id=note_id,
-            attributes=note_attributes(body),
+    async with history.record(database_id, user.account_id, "note.update"):
+        note = await UpdateNote(uow, authorization).execute(
+            UpdateNoteRequest(
+                database_id=database_id,
+                note_id=note_id,
+                attributes=note_attributes(body),
+            )
         )
-    )
     return note_response(note)
 
 
@@ -300,8 +316,11 @@ async def delete_note(
     note_id: UUID,
     uow: CanvasUow,
     authorization: Authorization,
+    user: AuthenticatedUser,
+    history: History,
 ) -> Response:
-    await DeleteNote(uow, authorization).execute(
-        NoteRequest(database_id=database_id, note_id=note_id)
-    )
+    async with history.record(database_id, user.account_id, "note.delete"):
+        await DeleteNote(uow, authorization).execute(
+            NoteRequest(database_id=database_id, note_id=note_id)
+        )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
