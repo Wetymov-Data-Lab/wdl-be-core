@@ -33,27 +33,28 @@ API в Docker будет доступно по адресу `http://localhost:80
 <details>
 <summary><strong>Project commands</strong></summary>
 
-| Команда                         | Назначение                                      | Что выполняет                                                       |
-|---------------------------------|-------------------------------------------------|---------------------------------------------------------------------|
-| `make env`                      | Создать `.env` из `.env.example`                | `[ -f .env.example ] && cp -f .env.example .env \|\| echo '.env.example not found'` |
-| `make install`                  | Синхронизировать зависимости всех групп         | `uv sync --all-groups`                                              |
-| `make dev`                      | Запустить API с автоматической перезагрузкой    | `uv run uvicorn main:app --reload`                                  |
-| `make lint`                     | Проверить код с помощью Ruff                    | `uv run ruff check .`                                               |
-| `make format`                   | Отформатировать код с помощью Ruff              | `uv run ruff format .`                                              |
-| `make typecheck`                | Проверить типы с помощью mypy                    | `uv run mypy src`                                                   |
-| `make test`                     | Запустить тесты                                 | `uv run pytest`                                                     |
-| `make check`                    | Запустить все проверки                          | Последовательно запускает цели `lint`, `typecheck` и `test`         |
-| `make migrate`                  | Применить все неприменённые миграции Alembic    | `uv run alembic upgrade head`                                       |
-| `make migration name="message"` | Создать автогенерируемую миграцию Alembic        | `uv run alembic revision --autogenerate -m "$(name)"`               |
-| `make seed-demo account="uuid"` | Создать демо-проект с базами для тестирования   | `uv run python -m context.infrastructure.seeders.demo --account-id "$(account)"` |
-| `make up`                       | Запустить сервисы Docker Compose в фоне         | `docker compose up -d`                                              |
-| `make build`                    | Собрать образы сервисов Docker Compose          | `docker compose build`                                              |
-| `make logs`                     | Показывать логи сервисов в реальном времени     | `docker compose logs -f`                                            |
-| `make stop`                     | Остановить сервисы без удаления контейнеров     | `docker compose stop`                                               |
-| `make down`                     | Остановить и удалить контейнеры, сети и тома    | `docker compose down -v`                                            |
+| Команда                         | Назначение                                    | Что выполняет                                                                       |
+| ------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `make env`                      | Создать `.env` из `.env.example`              | `[ -f .env.example ] && cp -f .env.example .env \|\| echo '.env.example not found'` |
+| `make install`                  | Синхронизировать зависимости всех групп       | `uv sync --all-groups`                                                              |
+| `make dev`                      | Запустить API с автоматической перезагрузкой  | `uv run uvicorn main:app --reload`                                                  |
+| `make lint`                     | Проверить код с помощью Ruff                  | `uv run ruff check .`                                                               |
+| `make format`                   | Отформатировать код с помощью Ruff            | `uv run ruff format .`                                                              |
+| `make typecheck`                | Проверить типы с помощью mypy                 | `uv run mypy src`                                                                   |
+| `make test`                     | Запустить тесты                               | `uv run pytest`                                                                     |
+| `make check`                    | Запустить все проверки                        | Последовательно запускает цели `lint`, `typecheck` и `test`                         |
+| `make migrate`                  | Применить все неприменённые миграции Alembic  | `uv run alembic upgrade head`                                                       |
+| `make migration name="message"` | Создать автогенерируемую миграцию Alembic     | `uv run alembic revision --autogenerate -m "$(name)"`                               |
+| `make seed-demo account="uuid"` | Создать демо-проект с базами для тестирования | `uv run python -m context.infrastructure.seeders.demo --account-id "$(account)"`    |
+| `make up`                       | Запустить сервисы Docker Compose в фоне       | `docker compose up -d`                                                              |
+| `make build`                    | Собрать образы сервисов Docker Compose        | `docker compose build`                                                              |
+| `make logs`                     | Показывать логи сервисов в реальном времени   | `docker compose logs -f`                                                            |
+| `make stop`                     | Остановить сервисы без удаления контейнеров   | `docker compose stop`                                                               |
+| `make down`                     | Остановить и удалить контейнеры, сети и тома  | `docker compose down -v`                                                            |
 
 </details>
 
 ---
 
 Правила разработки и подключение Git hooks описаны в [CONTRIBUTING.md](CONTRIBUTING.md).
+Структура репозитория вдохновлена пользователем @Lambidus
